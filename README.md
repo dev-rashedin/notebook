@@ -1,1 +1,1 @@
-# Dev Diary (notes.rashedin.dev)
+# Notebook (notebook.rashedin.dev)
