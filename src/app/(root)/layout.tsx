@@ -1,0 +1,17 @@
+import React from 'react';
+import { Spotlight } from '@/components/ui/SpotlightNew';
+import Navbar from '@/components/Navbar';
+
+export default function HomeLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <main className="relative">
+      <Spotlight className="absolute -top-40 left-0 md:-top-20 md:left-60" fill="white" />
+      <Navbar type="home" />
+      {children}
+    </main>
+  );
+}
