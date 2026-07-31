@@ -8,9 +8,9 @@ const Logo = ({ type = 'home' }: { type?: string }) => {
         href="/"
         className={`flex items-center gap-2 group group-hover:scale-105 h-20 ${type === 'sidebar' ? 'lg:hidden' : ''}`}
       >
-        <Image src="/logo.svg" width={40} height={40} alt="logo" />
+        <Image src="/favicon.png" width={40} height={40} alt="logo" />
         <span className="font-heading font-extrabold text-2xl tracking-tight text-brand">
-          Servest
+        Notebook
         </span>
       </Link>
     </div>
