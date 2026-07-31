@@ -206,3 +206,218 @@ CREATE TABLE table_name (
 );
 ```
 
+### Example
+
+```sql
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP
+);
+```
+
+Notes:
+
+* Each column needs a name and data type
+* Constraints improve data quality
+* Table names should be meaningful
+
+---
+
+## Drop Table
+
+### Drop Entire Table
+
+```sql
+DROP TABLE table_name;
+```
+
+Deletes the table and all data.
+
+---
+
+### Delete All Rows (Keep Table)
+
+```sql
+TRUNCATE TABLE table_name;
+```
+
+Notes:
+
+* Faster than `DELETE`
+* Cannot always be rolled back
+* Resets auto-increment counters
+
+---
+
+## Modify Table (ALTER TABLE)
+
+`ALTER TABLE` changes the structure of a table.
+
+---
+
+### Add Column
+
+```sql
+ALTER TABLE table_name
+ADD column_name datatype;
+```
+
+Example:
+
+```sql
+ALTER TABLE users
+ADD age INT;
+```
+
+---
+
+### Drop Column
+
+```sql
+ALTER TABLE table_name
+DROP COLUMN column_name;
+```
+
+Example:
+
+```sql
+ALTER TABLE users
+DROP COLUMN age;
+```
+
+---
+
+### Rename Column
+
+```sql
+-- PostgreSQL / SQLite
+ALTER TABLE table_name RENAME COLUMN old TO new;
+
+-- MySQL
+ALTER TABLE table_name CHANGE old new datatype;
+```
+
+---
+
+### Change Column Data Type
+
+```sql
+-- PostgreSQL
+ALTER TABLE table_name
+ALTER COLUMN column_name TYPE datatype;
+
+-- MySQL
+ALTER TABLE table_name
+MODIFY column_name datatype;
+```
+
+Notes:
+
+* Existing data must match new type
+* Always back up first
+
+---
+
+## SQL Data Types
+
+Every column must have a data type. Data types define:
+
+* What kind of values are allowed
+* How much space is used
+* How data is processed
+
+Choosing good data types improves:
+
+* Data integrity
+* Performance
+* Storage efficiency
+
+---
+
+### Common SQL Data Types (RDBMS-Agnostic)
+
+These work similarly in PostgreSQL, MySQL, and SQLite.
+
+| Data Type     | What It Stores        | Beginner Explanation           | Typical Use          | Example                                 |
+| ------------- | --------------------- | ------------------------------ | -------------------- | --------------------------------------- |
+| INT / INTEGER | Whole numbers         | No decimal part                | IDs, counters        | 42                                      |
+| BIGINT        | Very large numbers    | For billions+                  | Large systems        | 9000000000                              |
+| DECIMAL(p,s)  | Exact decimals        | p = digits, s = decimals       | Money, ratings       | 99.99                                   |
+| FLOAT         | Approximate decimals | Not always perfectly accurate | Scientific data      | 3.14159                                 |
+| VARCHAR(n)    | Limited text          | Max n characters               | Emails               | [alice@mail.com](mailto:alice@mail.com) |
+| TEXT          | Long text             | No fixed limit                 | Articles             | Long message                            |
+| DATE          | Date only             | Year-month-day                 | Birthdate            | 1999-08-15                              |
+| TIMESTAMP     | Date + time           | Includes time                  | Logs                 | 2026-01-24 14:30                        |
+| BOOLEAN       | True/False            | Logical value                  | Flags                | TRUE                                    |
+
+---
+
+### Note: FLOAT vs DECIMAL
+
+- `DECIMAL` stores numbers **exactly**, so it is safe for money and financial data.
+- `FLOAT` stores numbers **approximately**, so small rounding errors can happen.
+
+
+### Auto-Increment / Identity Columns
+
+Used for automatically generated IDs.
+
+| Database   | Syntax              | Explanation          | Example                |
+| ---------- | ------------------- | -------------------- | ---------------------- |
+| PostgreSQL | SERIAL / IDENTITY   | Auto-increases value | id SERIAL              |
+| MySQL      | AUTO_INCREMENT      | Adds 1 per row       | id INT AUTO_INCREMENT  |
+| SQLite     | INTEGER PRIMARY KEY | Special auto-ID      | id INTEGER PRIMARY KEY |
+
+---
+
+### Timestamp and Time Zone Handling
+
+| Database   | Type           | Behavior        | Example          |
+| ---------- | -------------- | --------------- | ---------------- |
+| PostgreSQL | TIMESTAMP      | No timezone     | 2026-01-24 14:30 |
+| PostgreSQL | TIMESTAMPTZ    | With timezone   | Auto-adjust      |
+| MySQL      | DATETIME       | No timezone     | 2026-01-24 14:30 |
+| MySQL      | TIMESTAMP      | UTC based       | Converted        |
+| SQLite     | TEXT / INTEGER | Stored as value | "2026-01-24"     |
+
+---
+
+### Boolean Storage Differences
+
+| Database   | Declared Type | Stored As  | Example |
+| ---------- | ------------- | ---------- | ------- |
+| PostgreSQL | BOOLEAN       | True/False | TRUE    |
+| MySQL      | BOOLEAN       | 1 / 0      | 1       |
+| SQLite     | BOOLEAN       | 1 / 0      | 0       |
+
+---
+
+### VARCHAR Length Enforcement
+
+| Database   | Enforced | Explanation       |
+| ---------- | -------- | ----------------- |
+| PostgreSQL | Yes      | Rejects long text |
+| MySQL      | Yes      | Throws error      |
+| SQLite     | No       | Ignores limit     |
+
+---
+
+### Best Practices
+
+* Always back up before schema changes
+* Use meaningful table and column names
+* Choose correct data types early
+* Avoid changing large tables frequently
+* Test changes in development first
+
+---
+
+## Key Takeaways
+
+* Always verify active database
+* Use CREATE, DROP, ALTER carefully
+* Prefer standard data types
+* Understand auto-increment behavior
+* Backups are mandatory before changes
