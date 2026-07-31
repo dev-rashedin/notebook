@@ -1,0 +1,176 @@
+# Servest Guide
+
+## Overview
+
+`Servest` is a modern backend project scaffolding and addon generator, inspired by **create-vite** and **shadcn/ui**, but built entirely for backend frameworks. It helps you quickly create structured backend starter projects and extend them with ready-to-use features.
+
+`Servest` is framework- and runtime-agnostic — currently supporting `Express`, with **Fastify**, **NestJS**, **Django**, **Laravel**, and more coming soon.
+
+It consists of two main parts:
+
+- `create-servest` — The CLI tool used to scaffold new backend projects instantly.
+- `servest (addons)` — A flexible extension system for generating modules, middleware, and integrations (authentication, databases, utilities) inside existing projects.
+
+You can think of Servest as:
+
+> create-vite + shadcn, but for backend frameworks.
+
+Together, they provide a smooth developer experience, eliminating configuration hassles and repetitive setup, and can significantly speed up backend project development using ready-to-use templates and addons — or both combined.
+
+---
+
+## Runtime Compatibility
+
+Servest currently runs on `Node.js 18+` (tested on 20.x and 22.x).  
+Some addons may require a higher Node version depending on their dependencies.
+
+> 💡 Ensure your Node version supports ES modules and `import.meta` syntax.
+
+**Future Runtime Support**
+
+Servest will support additional runtimes beyond Node.js.  
+For these, prebuilt runtime packages (APKs) will be provided, allowing projects to run seamlessly across environments.
+
+This approach ensures Servest remains **framework- and runtime-agnostic**, letting you combine templates and addons in any supported runtime.
+
+---
+
+## Try Servest Online
+
+You can try `Servest` templates online on `StackBlitz`
+— no local setup required.
+Each template runs a backend environment pre-configured with Servest’s project structure and dependencies.
+
+You can open a template directly using the following links:
+
+### Express Templates
+
+| Template            | Runtime | Open                                                                                                                                                               |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| express-basic-js    | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-basic-js?file=app.js)        |
+| express-basic-ts    | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-basic-ts?file=src/app.ts)    |
+| express-mvc-cjs     | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-mvc-cjs?file=src/app.js)     |
+| express-mvc-esm     | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-mvc-esm?file=src/app.js)     |
+| express-mvc-ts      | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-mvc-ts?file=src/app.ts)      |
+| express-modular-cjs | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-modular-cjs?file=src/app.js) |
+| express-modular-esm | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-modular-esm?file=src/app.js) |
+| express-modular-ts  | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/express/express-modular-ts?file=src/app.ts)  |
+
+### Fastify Templates
+
+| Template           | Runtime | Open                                                                                                                                                              |
+| ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| fastify-basic-js   | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-basic-js?file=app.js)       |
+| fastify-basic-ts   | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-basic-ts?file=src/app.ts)   |
+| fastify-mvc-cjs    | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-mvc-cjs?file=src/app.js)    |
+| fastify-mvc-esm    | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-mvc-esm?file=src/app.js)    |
+| fastify-mvc-ts     | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-mvc-ts?file=src/app.ts)     |
+| fastify-plugin-cjs | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-plugin-cjs?file=src/app.js) |
+| fastify-plugin-esm | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-plugin-esm?file=src/app.js) |
+| fastify-plugin-ts  | Node.js | [Open with StackBlitz](https://stackblitz.com/github/dev-rashedin/servest/tree/main/packages/create-servest/templates/fastify/fastify-plugin-ts?file=src/app.ts)  |
+
+---
+
+## How Servest Works
+
+`Servest` lets you scaffold backend projects and extend them instantly with built-in addons.
+
+### Scaffolding your first **Servest** project
+
+Use the CLI tool to scaffold backend project templates and then follow the prompts:
+
+```bash
+{
+  "npm": "npm create servest@latest",
+  "yarn": "yarn create servest",
+  "pnpm": "pnpm create servest",
+  "bun": "bun create servest",
+  "deno": "deno init --npm servest"
+}
+```
+
+visit the [npm package](https://www.npmjs.com/package/create-servest) or check the [GitHub repository](https://github.com/dev-rashedin/servest/blob/main/packages/create-servest/README.md)
+
+### Non-interactive scaffolding
+
+You can directly specify the project name and template via CLI options:
+
+_npm 7+, extra double-dash is needed:_
+
+```bash
+npm create servest@latest servest-project -- --template express-mvc-ts
+```
+
+See [create-servest templates](https://github.com/dev-rashedin/servest/tree/main/packages/create-servest/templates) for more details on each supported template: `express-basic-js`, `express-basic-ts`, `express-mvc-cjs`, `express-mvc-esm`, `express-mvc-ts`, `express-modular-cjs`, `express-modular-esm`, `express-modular-ts`.
+
+> 💡 Tip: Use Dot (`.`) as the project name to scaffold in the current directory.
+
+### Scaffolding with addons
+
+You can automatically include additional utilities during scaffolding using the `-a` or `--addons` flag:
+
+```bash
+npm create servest@latest servest-project -- --template express-mvc-ts -addons f-auth mongoose eslint-prettier lint-staged
+```
+
+This will scaffold the `express-mvc-ts` project and install the required npm packages to enhance your development workflow.
+
+> 💡 Tip: If any addon fails, the remaining ones will still be applied. You can re-run the failed addons manually later.
+
+To learn more about servest addons, visit the [npm package](https://www.npmjs.com/package/servest) or check the [GitHub repository](https://github.com/dev-rashedin/servest/blob/main/packages/servest-addons/README.md)
+
+---
+
+## Community Templates
+
+`Servest` lets you quickly start backend projects using **ready-made templates**.  
+You’re not limited to the official ones — you can also use **community-maintained templates** from GitHub or elsewhere.
+
+To use a community template from GitHub:
+
+```bash
+# Copy the template files to a new folder
+npx degit user/project my-project
+cd my-project
+
+# Install the project dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+> 💡 Some repositories use `main` instead of `master` as their default branch. In that case, add `#main` to the repo name:
+
+```bash
+npx degit user/project#main my-project
+```
+
+## Future Plan
+
+Servest aims to become the **create-vite for backend development** — a unified scaffolding and addon ecosystem across all major backend frameworks and runtimes.
+
+**Upcoming goals:**
+
+- Add support for **NestJS**, **Fastify**, **Django**, and **Laravel**.
+- Build an official addon library for common backend utilities
+
+To learn more about the roadmap and vision [Our Journey](/guide/our-journey)
+
+---
+
+## Contributing to Servest
+
+Servest is open-source and welcomes contributors!
+
+You can explore the source code and contribute via:
+
+- **GitHub:** [dev-rashedin/servest](https://github.com/dev-rashedin/servest)
+- **NPM:** [create-servest](https://www.npmjs.com/package/create-servest) • [servest](https://www.npmjs.com/package/servest)
+
+If you’d like to contribute **templates**, **addons**, **fix bugs**, or **improve the docs**,  
+check out the [Contributors Guide](https://github.com/dev-rashedin/servest/blob/main/CONTRIBUTING.md).
+
+Released under the `MIT` License
+
+Copyright © 2025-present `Rashedin Islam` & `Servest Contributors`
