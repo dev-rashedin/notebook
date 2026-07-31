@@ -1,0 +1,208 @@
+# Delicious Database (Part 4): SQL for Developers - Schema Management and Data Types
+
+This article covers the core concepts of SQL database creation, modification, backup, table management, and data types. It is a practical reference for developers who want to understand database structure, constraints, and administration using SQL.
+
+
+This is a DBMS-agnostic article series. However, whenever SQL syntax or examples differ, only **PostgreSQL, MySQL, and SQLite** are included.
+
+You will learn how to:
+
+* Create and delete databases
+* Back up databases
+* Check which database you are connected to
+* Switch between databases
+* Create, drop, and modify tables
+* Choose appropriate data types
+
+
+Whether you're a beginner, an intermediate, or an experienced developer, this guide will help you strengthen your understanding of SQL database fundamentals. You can use it both as a learning resource and as a quick reference.
+
+
+---
+
+## Create Database
+
+The `CREATE DATABASE` statement creates a new database.
+
+```sql
+CREATE DATABASE databasename;
+```
+
+### Example
+
+```sql
+CREATE DATABASE testdb;
+```
+
+Notes:
+
+* Requires permission on the server
+* Database name must be unique
+* The database is empty after creation
+
+---
+
+## Drop Database
+
+The `DROP DATABASE` statement permanently deletes a database.
+
+```sql
+DROP DATABASE databasename;
+```
+
+### Example
+
+```sql
+DROP DATABASE testdb;
+```
+
+Notes:
+
+* Deletes all tables and data
+* Cannot be undone
+* You cannot drop the database you are currently using
+
+---
+
+## Backup Database
+
+PostgreSQL, MySQL, and SQLite do not support `BACKUP DATABASE` as an SQL command. They use external tools.
+
+
+### PostgreSQL Backup
+
+```bash
+pg_dump -U username dbname > backup.sql
+```
+
+Restore:
+
+```bash
+psql -U username dbname < backup.sql
+```
+
+---
+
+### MySQL Backup
+
+```bash
+mysqldump -u username -p dbname > backup.sql
+```
+
+Restore:
+
+```bash
+mysql -u username -p dbname < backup.sql
+```
+
+---
+
+### SQLite Backup
+
+```bash
+sqlite3 dbname.db ".backup backup.db"
+```
+
+Restore:
+
+```bash
+cp backup.db dbname.db
+```
+
+Notes:
+
+* Always back up before major changes
+* Store backups in a different location
+
+---
+
+## Check and Change the Current Database
+
+Before creating tables, you must know **which database you are working in**.
+
+### List All Databases
+
+```sql
+-- PostgreSQL
+SELECT datname FROM pg_database;
+-- Or using terminal
+\l
+
+-- MySQL
+SHOW DATABASES;
+
+-- SQLite
+.databases
+```
+
+### Check Current Database
+
+```sql
+-- PostgreSQL
+SELECT current_database();
+
+-- MySQL
+SELECT DATABASE();
+
+-- SQLite
+PRAGMA database_list;
+```
+
+### Switch / Connect to Another Database
+
+```sql
+-- PostgreSQL (psql)
+\c dbname
+
+-- MySQL
+USE dbname;
+
+-- SQLite
+.open dbname.db
+```
+
+### Show Current Database's Content
+```sql
+-- PostgreSQL: Show all tables in the public schema
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public';
+
+-- PostgreSQL (psql only): Show connection info
+\conninfo
+
+
+-- MySQL: Show all tables in the current database
+SHOW TABLES;
+
+
+-- SQLite: Show the filename of the current database
+PRAGMA database_list;      -- Returns file path and name of attached databases
+
+-- SQLite (terminal): List all tables
+.tables
+
+-- SQLite: Show table structure
+.schema persons
+
+-- SQLite: List all tables (SQL way)
+SELECT name
+FROM sqlite_master
+WHERE type = 'table';
+```
+
+---
+
+
+## Create Table
+
+The `CREATE TABLE` statement defines a new table.
+
+```sql
+CREATE TABLE table_name (
+    column1 datatype,
+    column2 datatype,
+    column3 datatype
+);
+```
+
