@@ -8,12 +8,14 @@ import { MDXComponents } from '@/components/MDXComponent';
 import { docsOrder, nestedDocsOrder } from '@/data';
 
 async function getContent(endpoint: string, slug: string) {
-  const baseDir = path.join(process.cwd(), `../docs/${endpoint}`);
+  const baseDir = path.join(process.cwd(), 'src', 'docs', endpoint);
   const slugParts = slug.split('/').filter(Boolean); // e.g. ['express','express-basic-js']
   const filePath = path.join(baseDir, ...slugParts) + '.mdx';
   const source = await fs.readFile(filePath, 'utf-8');
 
   const headings = extractHeadingsFromMdx(source);
+  
+  
 
   // --------------- NEW ORDER/prev/next LOGIC -----------------
   // Helper: flatten docsOrder (strings only)

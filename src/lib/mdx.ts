@@ -9,7 +9,7 @@ import Slugger from 'github-slugger';
 import type { Heading } from 'mdast';
 
 export async function readMdxSource(section: string, slug: string) {
-  const filePath = path.join(process.cwd(), `../docs/${section}/${slug}.mdx`);
+  const filePath = path.join(process.cwd(), `./docs/${section}/${slug}.mdx`);
   const source = await fs.readFile(filePath, 'utf-8');
   return source;
 }

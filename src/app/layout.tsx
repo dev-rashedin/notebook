@@ -143,7 +143,7 @@ export default function RootLayout({
           content="rXuGd6piozPg3OsqUwmEgfymqQDbG9b16yMJDwqOGl8"
         />
       </head>
-      <body className="relative overflow-x-hidden">
+      <body className="relative overflow-x-hidden" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           {children}
           <Analytics />

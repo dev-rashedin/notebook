@@ -3,7 +3,7 @@ import path from 'path';
 import { docsOrder, nestedDocsOrder } from '@/data';
 
 export function getContentLinks(endpoint: string) {
-  const dir = path.join(process.cwd(), `../docs/${endpoint}`);
+  const dir = path.join(process.cwd(), `./docs/${endpoint}`);
   const files = fs.readdirSync(dir);
 
   const defaultOrder = files.filter((f) => f.endsWith('.mdx')).map((f) => f.replace(/\.mdx$/, ''));
