@@ -13,7 +13,6 @@ const Navbar = ({ type = 'home' }: { type: string }) => {
           <NavLink />
           <MobileMenu />
           <div className={`hidden md:block ${type === 'sidebar' ? 'xl:mr-20' : ''}`}>
-            {/* <Socials /> */}
             <ThemeSwitcher />
           </div>
         </section>

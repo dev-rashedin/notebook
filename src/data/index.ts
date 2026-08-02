@@ -24,37 +24,28 @@ import {
 import { SiBun, SiDeno, SiPnpm, SiYarn } from 'react-icons/si';
 
 export const navItems = [
-  { label: 'Guide', to: '/guide' },
-  { label: 'Config', to: '/config' },
-  { label: 'Addons', to: '/addons' },
+  { label: 'Case Studies', to: '/case-studies' },
   {label: 'Notes', to: '/notes' },
+  { label: 'Articles', to: '/articles' },
+  { label: 'Interviews', to: '/interviews' },
   {
     label: 'Resources',
     dropdown: [
-      { label: 'Blog', to: '/blog' },
+      { label: 'Portfolio', to: 'https:rashedin.dev' },
       {
-        label: 'create-servest',
-        subMenu: [
-          { label: 'npm Package', to: 'https://www.npmjs.com/package/create-servest' },
+        label: 'NPM Packages',
+        subMenu: [   
           {
-            label: 'Changelog',
-            to: 'https://github.com/dev-rashedin/servest/blob/main/packages/create-servest/CHANGELOG.md',
+            label: 'http-status-toolkit',
+            to: 'https://www.npmjs.com/package/http-status-toolkit',
           },
-        ],
-      },
-      {
-        label: 'servest-addons',
-        subMenu: [
-          { label: 'npm Package', to: 'https://www.npmjs.com/package/servest' },
-          {
-            label: 'Changelog',
-            to: 'https://github.com/dev-rashedin/servest/blob/main/packages/servest-addons/CHANGELOG.md',
+           {
+            label: 'express-error-toolkit',
+            to: 'https://www.npmjs.com/package/express-error-toolkit',
           },
+            { label: 'create-servest', to: 'https://www.npmjs.com/package/create-servest' },
+           { label: 'servest', to: 'https://www.npmjs.com/package/servest' },
         ],
-      },
-      {
-        label: 'Contributing',
-        to: 'https://github.com/dev-rashedin/servest/blob/main/CONTRIBUTING.md',
       },
     ],
   },

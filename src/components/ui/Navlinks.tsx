@@ -63,7 +63,7 @@ function NavItem({ item, pathname, type = 'main' }: ItemProps) {
 
       {item.dropdown && open && (
         <ul
-          className={`w-[200px] rounded-xl flex flex-col gap-4 z-50 px-4 py-8 ${
+          className={`w-72 rounded-xl flex flex-col gap-4 z-50 px-4 py-8 ${
             isMobile ? '' : 'absolute -left-24 lg:-left-16 top-full bg-navbar'
           }`}
         >
