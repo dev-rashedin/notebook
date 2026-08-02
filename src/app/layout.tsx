@@ -11,14 +11,14 @@ const inter = Inter({ subsets: ['latin'], weight: ['400', '700'], display: 'swap
 
 export const metadata: Metadata = {
   title: {
-    default: 'Servest | Backend Starter & Addon Toolkit',
-    template: '%s | Servest',
+    default: "Notebook | Personal Dev Journal",
+    template: '%s | Notebook',
   },
 
   description:
-    'Servest is an open-source backend starter and addon toolkit that helps developers generate production-ready templates for Express, Fastify, Django, Laravel, and more.',
+    'A personal development journal for tracking my learning and growth as a developer.',
 
-  metadataBase: new URL('https://servest.dev'),
+  metadataBase: new URL('https://notebook.rashedin.dev'),
 
   authors: [{ name: 'Rashedin Islam' }],
 
@@ -32,18 +32,18 @@ export const metadata: Metadata = {
   },
 
   alternates: {
-    canonical: 'https://servest.dev',
+    canonical: 'https://notebook.rashedin.dev',
   },
 
   openGraph: {
-    title: 'Servest | Backend Starter & Addon Toolkit',
+    title: 'Notebook | Personal Dev Journal',
 
     description:
-      'Generate production-ready backend templates and install addons like Prisma, Mongoose, ESLint, and Prettier in seconds.',
+      'A personal development journal for tracking my learning and growth as a developer.',
 
-    url: 'https://servest.dev',
+    url: 'https://notebook.rashedin.dev',
 
-    siteName: 'Servest',
+    siteName: 'Notebook',
 
     locale: 'en_US',
 
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
         url: '/images/servest-og.png',
         width: 1200,
         height: 630,
-        alt: 'Servest Backend Starter Toolkit',
+        alt: 'Notebook | Personal Dev Journal',
       },
     ],
 
@@ -62,10 +62,10 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
 
-    title: 'Servest | Backend Starter & Addon Toolkit',
+    title: 'Notebook | Personal Dev Journal',
 
     description:
-      'Generate backend templates and addons for Express, Fastify, Django, Laravel and more.',
+      'A personal development journal for tracking my learning and growth as a developer.',
 
     images: ['/images/servest-og.png'],
   },
@@ -91,14 +91,14 @@ export default function RootLayout({
               '@graph': [
                 {
                   '@type': 'SoftwareApplication',
-                  '@id': 'https://servest.dev/#app',
+                  '@id': 'https://notebook.rashedin.dev/#app',
 
-                  name: 'Servest',
+                  name: 'Notebook',
 
-                  url: 'https://servest.dev',
+                  url: 'https://notebook.rashedin.dev',
 
                   description:
-                    'Open-source backend starter and addon toolkit for Express, Fastify, Django, Laravel and other backend frameworks.',
+                    'A personal development journal for tracking my learning and growth as a developer.',
 
                   applicationCategory: 'DeveloperApplication',
 
@@ -111,14 +111,14 @@ export default function RootLayout({
                   },
 
                   author: {
-                    '@id': 'https://servest.dev/#person',
+                    '@id': 'https://notebook.rashedin.dev/#person',
                   },
                 },
 
                 {
                   '@type': 'Person',
 
-                  '@id': 'https://servest.dev/#person',
+                  '@id': 'https://notebook.rashedin.dev/#person',
 
                   name: 'Rashedin Islam',
 
@@ -128,11 +128,11 @@ export default function RootLayout({
                 {
                   '@type': 'WebSite',
 
-                  '@id': 'https://servest.dev/#website',
+                  '@id': 'https://notebook.rashedin.dev/#website',
 
-                  url: 'https://servest.dev',
+                  url: 'https://notebook.rashedin.dev',
 
-                  name: 'Servest',
+                  name: 'Notebook',
                 },
               ],
             }),
