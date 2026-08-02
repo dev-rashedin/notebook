@@ -5,8 +5,12 @@ import MotionWrapper from '@/components/MotionWrapper';
 import DrawerContainer from '@/components/DrawerContainer';
 import { getNestedLinks } from '@/lib/getLinks';
 
-export default function GuideLayout({ children }: { children: ReactNode }) {
+export default function NotesLayout({ children }: { children: ReactNode }) {
   const links = getContentLinks('notes');
+
+  console.log('links', links);
+  
+  
   const nestedLinks = getNestedLinks();
 
   return (

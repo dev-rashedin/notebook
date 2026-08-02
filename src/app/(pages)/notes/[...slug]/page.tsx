@@ -38,7 +38,7 @@ export default async function NotesPage({
   params: Promise<{ slug?: string[] }>;
 }) {
   const { slug = [] } = await params;
-  const slugPath = slug.join("/"); // e.g. "express/express-basic-ts"
+  const slugPath = slug.join("/");
 
-  return <DisplayContent endpoint="notes" slug={slugPath} />;
+  return <DisplayContent endpoint="notes/SQL" slug={slugPath} />;
 }

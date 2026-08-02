@@ -38,6 +38,8 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
               </p>
             );
           }
+        {  console.log('item type', item.type);}
+          
 
           const href = item.slug === 'index' ? `/${type}` : `/${type}/${item.slug}`;
           const isActive =

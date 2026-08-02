@@ -41,7 +41,7 @@ export async function generateStaticParams(): Promise<{ slug: string[] }[]> {
   return getAllMdxFiles(baseDir);
 }
 
-export default async function GuidPage({
+export default async function GuidePage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;

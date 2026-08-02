@@ -84,8 +84,8 @@ export const docsOrder: Record<string, string[]> = {
   ],
   notes: [
     'index',
-    '_Notes',
-    'f-fileName',
+    '_SQL',
+    'introduction',
     'eslint',
     'prettier',
     'eslint-prettier',
@@ -98,6 +98,10 @@ export const docsOrder: Record<string, string[]> = {
 
 export const nestedDocsOrder: Record<string, { label: string; items: string[] }[]> = {
   templates: [
+    {
+      label: 'SQL',
+      items: ['introduction', 'sql-setup', 'sql-queries', 'sql-orms'],
+    },
     {
       label: 'Express',
       items: [
