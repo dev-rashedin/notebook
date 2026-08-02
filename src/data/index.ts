@@ -27,6 +27,7 @@ export const navItems = [
   { label: 'Guide', to: '/guide' },
   { label: 'Config', to: '/config' },
   { label: 'Addons', to: '/addons' },
+  {label: 'Notes', to: '/notes' },
   {
     label: 'Resources',
     dropdown: [
@@ -72,6 +73,18 @@ export const docsOrder: Record<string, string[]> = {
   addons: [
     'index',
     '_Addons',
+    'f-fileName',
+    'eslint',
+    'prettier',
+    'eslint-prettier',
+    'mongoose',
+    'prisma',
+    'drizzle',
+    'lint-staged',
+  ],
+  notes: [
+    'index',
+    '_Notes',
     'f-fileName',
     'eslint',
     'prettier',
