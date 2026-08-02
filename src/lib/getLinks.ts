@@ -27,8 +27,8 @@ export function getContentLinks(endpoint: string) {
   });
 }
 
-export function getNestedLinks(): NestedLink[] {
-  const categories = nestedDocsOrder.templates || [];
+export function getNestedLinks(endpoint: string): NestedLink[] {
+  const categories = nestedDocsOrder[endpoint] || [];
 
   return categories.map((cat) => ({
     type: 'category',

@@ -84,58 +84,15 @@ export const docsOrder: Record<string, string[]> = {
   ],
   notes: [
     'index',
-    '_SQL',
-    'introduction',
-    'eslint',
-    'prettier',
-    'eslint-prettier',
-    'mongoose',
-    'prisma',
-    'drizzle',
-    'lint-staged',
   ],
 };
 
 export const nestedDocsOrder: Record<string, { label: string; items: string[] }[]> = {
-  templates: [
+  notes: [
     {
       label: 'SQL',
-      items: ['introduction', 'sql-setup', 'sql-queries', 'sql-orms'],
+      items: ['introduction', 'schema-management'],
     },
-    {
-      label: 'Express',
-      items: [
-        'express-basic-js',
-        'express-basic-ts',
-        'express-mvc-cjs',
-        'express-mvc-esm',
-        'express-mvc-ts',
-        'express-modular-cjs',
-        'express-modular-esm',
-        'express-modular-ts',
-      ],
-    },
-    {
-      label: 'Fastify',
-      items: [
-        'fastify-basic-js',
-        'fastify-basic-ts',
-        'fastify-mvc-cjs',
-        'fastify-mvc-esm',
-        'fastify-mvc-ts',
-        'fastify-plugin-cjs',
-        'fastify-plugin-esm',
-        'fastify-plugin-ts',
-      ],
-    },
-    // {
-    //   label: 'Django',
-    //   items: ['django-basic-py', 'django-auth'],
-    // },
-    // {
-    //   label: 'Laravel',
-    //   items: ['laravel-basic-php', 'laravel-auth'],
-    // },
   ],
 };
 

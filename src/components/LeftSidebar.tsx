@@ -8,6 +8,12 @@ import { useSidebar } from './SidebarToggleContext';
 import AnimatedBorder from './ui/AnimatedBorder';
 import { RiArrowRightDoubleFill } from '@/data';
 
+const formatLabel = (label: string) =>
+  label
+    .split("-")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
 const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
   const pathname = usePathname();
   const { sidebarOpen, setSidebarOpen } = useSidebar();
@@ -61,7 +67,7 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
       </nav>
 
       {/* nested nav items */}
-      {pathname.includes('/guide') && nestedLinks && (
+      {pathname.includes(`/${type}`) && nestedLinks && (
         <section className="ml-6 md:ml-9 lg:ml-3">
           {nestedLinks!.map((cat, idx) => (
             <div key={cat.label}>
@@ -103,7 +109,7 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
                         className={`group relative w-full max-w-fit flex flex-col mt-2  ${isActive ? 'text-brand font-medium' : ''}`}
                         onClick={() => setSidebarOpen && setSidebarOpen(false)}
                       >
-                        {sub.label}
+                        {formatLabel(sub.label)}
                         <AnimatedBorder />
                       </Link>
                     );

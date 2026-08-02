@@ -11,7 +11,7 @@ export default function NotesLayout({ children }: { children: ReactNode }) {
   console.log('links', links);
   
   
-  const nestedLinks = getNestedLinks();
+  const nestedLinks = getNestedLinks('notes');
 
   return (
     <main className="lg:flex">
