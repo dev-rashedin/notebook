@@ -2,21 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import DisplayContent from "@/components/DisplayContent";
 
-// export async function generateStaticParams(): Promise<{ slug: string }[]> {
-//   const files = await fs.readdir(path.join(process.cwd(), './docs/guide'));
-
-//   // Type assertion ensures TS sees it as Array<{slug: string}>
-//   const params = files
-//     .filter((f) => f.endsWith('.mdx'))
-//     .map((f) => ({ slug: f.replace(/\.mdx$/, '') })) as { slug: string }[];
-
-//   return params;
-// }
 
 export async function generateStaticParams(): Promise<{ slug: string[] }[]> {
-  const baseDir = path.join(process.cwd(), "./docs/guide");
+   const baseDir = path.join(process.cwd(), 'src', 'docs', 'case-studies');
 
-  // recursively walk the docs/guide directory
+  // recursively walk the docs/case-studies directory
   async function getAllMdxFiles(
     dir: string,
     prefix: string[] = [],
@@ -41,7 +31,7 @@ export async function generateStaticParams(): Promise<{ slug: string[] }[]> {
   return getAllMdxFiles(baseDir);
 }
 
-export default async function GuidePage({
+export default async function CaseStudiesPage({
   params,
 }: {
   params: Promise<{ slug?: string[] }>;
@@ -49,5 +39,5 @@ export default async function GuidePage({
   const { slug = [] } = await params;
   const slugPath = slug.join("/"); // e.g. "express/express-basic-ts"
 
-  return <DisplayContent endpoint="guide" slug={slugPath} />;
+  return <DisplayContent endpoint="case-studies" slug={slugPath} />;
 }

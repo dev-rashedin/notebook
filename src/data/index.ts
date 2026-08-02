@@ -82,6 +82,12 @@ export const docsOrder: Record<string, string[]> = {
 };
 
 export const nestedDocsOrder: Record<string, { label: string; items: string[] }[]> = {
+  'case-studies': [
+    {
+      label: 'Aivinn',
+      items: ['overview', 'schema-management'],
+    },
+  ],
   notes: [
     {
       label: 'SQL',
