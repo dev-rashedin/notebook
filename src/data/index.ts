@@ -52,7 +52,7 @@ export const navItems = [
 ];
 
 export const docsOrder: Record<string, string[]> = {
-  guide: [
+  caseStudies: [
     '_Introduction',
     'index',
     'why-servest',
@@ -61,7 +61,10 @@ export const docsOrder: Record<string, string[]> = {
     'cli-reference',
     '_Templates',
   ],
-  addons: [
+    notes: [
+    'index',
+  ],
+  articles: [
     'index',
     '_Addons',
     'f-fileName',
@@ -73,7 +76,7 @@ export const docsOrder: Record<string, string[]> = {
     'drizzle',
     'lint-staged',
   ],
-  notes: [
+  interviews: [
     'index',
   ],
 };
