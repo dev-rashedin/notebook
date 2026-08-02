@@ -6,18 +6,18 @@ import DrawerContainer from '@/components/DrawerContainer';
 import { getNestedLinks } from '@/lib/getLinks';
 
 export default function GuideLayout({ children }: { children: ReactNode }) {
-  const links = getContentLinks('guide');
+  const links = getContentLinks('notes');
   const nestedLinks = getNestedLinks();
 
   return (
     <main className="lg:flex">
       <div className="sidebar">
-        <LeftSidebar links={links} type="guide" nestedLinks={nestedLinks} />
+        <LeftSidebar links={links} type="notes" nestedLinks={nestedLinks} />
       </div>
 
       {/* content area */}
       <div className="docs-content relative">
-        <DrawerContainer links={links} type="guide" nestedLinks={nestedLinks}>
+        <DrawerContainer links={links} type="notes" nestedLinks={nestedLinks}>
           <MotionWrapper>{children}</MotionWrapper>
         </DrawerContainer>
       </div>
