@@ -1,0 +1,307 @@
+# Aivinn Challenge System: A Complete Redesign — Case Study
+
+## Table of Contents
+1. [Background & Problem Statement](#background--problem-statement)
+2. [System Architecture Decisions](#system-architecture-decisions)
+3. [AI Tool Layer: AssignChallengeTool & IncrementChallengeTool](#ai-tool-layer)
+4. [Transaction-Triggered Evaluation: evaluateChallengeProgress](#transaction-triggered-evaluation)
+5. [Cron Jobs: The Backbone of Automation](#cron-jobs)
+6. [Shared Logic & Deduplication](#shared-logic--deduplication)
+7. [Testing & Verification](#testing--verification)
+8. [Lessons Learned](#lessons-learned)
+
+---
+
+## Background & Problem Statement
+
+Aivinn's Challenges feature lets users opt into system-generated financial habit challenges (e.g. "Avoid Coffee & Snacks," "Track Expenses Daily"). Unlike Goals, Challenges are **not user-editable** — they're suggested by the system, accepted by the user, and tracked automatically.
+
+The original implementation had two tools (`AssignChallengeTool`, `IncrementChallengeTool`) wired into an AI agent, plus a partial evaluation function (`evaluateChallengeProgress`) that only handled 2 of 5 challenge types. The system had three concrete problems:
+
+1. **No proactive suggestion path.** Challenges were only ever suggested reactively, when a user's chat message happened to match a category keyword. A user (including our own CEO) who never typed something like "I want to save on coffee" would simply never receive a challenge.
+2. **Three of five challenge types were dead code.** `AVOID`, `STREAK`, and `SAVE` types existed in the schema and had seed data, but nothing ever evaluated their progress — they'd sit at 0% forever.
+3. **No lifecycle management.** Challenges never expired, never got cleaned up, and stale `SUGGESTED` rows could accumulate indefinitely.
+
+This case study documents the full redesign: five cron jobs, a rewritten evaluation pipeline, and tool-layer fixes — built incrementally, with each architectural decision made deliberately rather than assumed.
+
+---
+
+## System Architecture Decisions
+
+Before writing any code, several foundational questions needed answers. Getting these wrong early would have meant rebuilding later.
+
+### Decision 1: User-centric, not wallet-centric
+
+**The question:** Aivinn wallets can be shared between multiple users. Should a challenge belong to a wallet (shared) or a user (individual)?
+
+**The answer:** Challenges belong to the **wallet owner only** — never to wallet members. This was already implicit in the schema (`user_challenges` has both `user_id` and `wallet_id`, with the uniqueness constraint keyed on `user_id`), but needed to be made explicit as a rule: `wallet_id` exists purely to know *which wallet's transactions to evaluate against*, not to determine *who* the challenge belongs to.
+
+**Why this matters:** if two people share a wallet, only the owner receives suggestions and notifications. This avoids ambiguity around "whose challenge is this" and "who gets credit" — decisions that would otherwise need their own arbitration logic.
+
+### Decision 2: Concurrency cap — 3 total, 2 suggested
+
+A user can have at most **3 challenges in play at once** (combined `SUGGESTED` + `ACTIVE`), with a sub-limit of **2 in `SUGGESTED` state**. This means:
+
+| Active count | Max additional Suggested |
+|---|---|
+| 0 | 2 |
+| 1 | 2 |
+| 2 | 1 |
+| 3 | 0 |
+
+**Why:** an earlier draft capped it at just 1 in-flight suggestion, which felt too restrictive — offering almost nothing to engage with. But no cap at all risks overwhelming the user with a wall of suggestions. 3/2 was chosen as a middle ground: enough variety to feel alive, tight enough to stay uncluttered.
+
+### Decision 3: Expiry over deletion where possible
+
+Two different cleanup philosophies were needed for two different states:
+
+- **Unaccepted `SUGGESTED` challenges** → hard-deleted after 2 weeks. There's no analytical value in a suggestion nobody engaged with, and no field was added to track "why" — it's just gone.
+- **Resolved `EXPIRED`/`COMPLETED` challenges** → kept for 3 months before deletion. This preserves a window for analytics (completion rates, reward history) before the row is purged.
+
+**Why the asymmetry:** unaccepted suggestions carry no signal — a user never even looked at it. Resolved challenges carry real signal (user engaged, succeeded or failed) and are worth retaining briefly for product insight.
+
+### Decision 4: `rules.evaluation_window_days` over `challenges.duration_days` as the source of truth
+
+The `challenges` table has a `duration_days` column, and the JSON `rules` field (personalized per user at assignment time) has its own `evaluation_window_days`. These *can* diverge — the assignment tools only ever read/write `evaluation_window_days`, never touching `duration_days`. Using the wrong one would mean expiry timing silently drifting from what the user was actually told.
+
+**Resolution:** every expiry/deadline calculation in the system reads `user_challenges.rules.evaluation_window_days`, falling back to a default (30 days) if absent. `duration_days` is effectively legacy and unused going forward.
+
+### Decision 5: Type-specific failure semantics
+
+Not all challenge types fail the same way. This took the most back-and-forth to settle:
+
+- **AVOID** ("don't spend on X for N days"): a single violating transaction should **fail the challenge immediately** — there's no partial credit for "mostly avoiding" something you were told to avoid entirely.
+- **STREAK** ("do X daily for N days"): a missed day should **reset progress to 0, not fail the challenge outright** — the user still has the remaining window to build a fresh streak. This was a deliberate UX choice: a punitive "one missed day = game over" felt discouraging, whereas a reset-and-encourage approach ("Streak Broken 💔 — log a transaction today to start again!") keeps the user engaged rather than abandoning ship.
+- **LIMIT / SAVE**: these are threshold-based, not event-based — progress is a continuous ratio (spend vs. limit, or savings vs. goal), recalculated daily/on-transaction until the window closes.
+
+---
+
+## AI Tool Layer
+
+### AssignChallengeTool
+
+This is the entry point when a user expresses challenge-relevant intent through chat (e.g. "I want to spend less on coffee").
+
+**Original design flaw:** the tool only matched challenges of type `LIMIT` or `FREQUENCY` (an MVP-era restriction), always picked the first matching challenge deterministically (`matchedChallenges[0]`), and had no concept of the concurrency cap — a chat-triggered assignment could push a user past the 3/2 limit that the cron jobs otherwise respect.
+
+**Final implementation:**
+
+```typescript
+export const AssignChallengeTool = tool(
+  async ({
+    userId,
+    walletId,
+    userInput,
+  }: {
+    userId: string;
+    walletId: string;
+    userInput: string;
+  }) => {
+    // 0️⃣ Cap check — before anything else
+    const underCap = await userChallengesService.isUnderChallengeCap(userId);
+    if (!underCap) {
+      return {
+        success: true,
+        challenge: null,
+        message: `You've already got challenges lined up! Finish or check your current ones on the Challenges screen before starting new ones.`,
+      };
+    }
+
+    // 1️⃣ Fetch categories (SOURCE OF TRUTH)
+    const categories = await categoriesService.fetchCategories();
+
+    // 2️⃣ Strict category detection (NO GUESSING)
+    const normalizedInput = userInput.toLowerCase();
+    const matchedCategory = categories.find(cat => {
+      const keywords = cat.name.toLowerCase().split(/[\s&]+/);
+      return keywords.some(kw => normalizedInput.includes(kw));
+    });
+
+    if (!matchedCategory) {
+      return {
+        success: true,
+        challenge: null,
+        message:
+          'I couldn\u2019t clearly match your request to a specific category. You can create a custom goal from the Goals screen.',
+      };
+    }
+
+    // 3️⃣ Fetch challenges
+    const challenges = await challengesService.fetchAllChallenges();
+
+    // 4️⃣ Match by category — ALL types now, not just LIMIT/FREQUENCY
+    const matchedChallenges = challenges.filter(ch => {
+      const rules = ch.rules as { trigger_category?: string };
+      return rules.trigger_category === matchedCategory.name;
+    });
+
+    if (matchedChallenges.length === 0) {
+      return {
+        success: true,
+        challenge: null,
+        message: `There\u2019s no challenge available yet for "${matchedCategory.name}". You can create a custom goal to track this from the Goals screen.`,
+      };
+    }
+
+    // 5️⃣ Pick best candidate using shared tier-priority logic
+    const selectedChallenge = await userChallengesService.pickBestCandidate(userId, matchedChallenges);
+
+    // 6️⃣ Fetch user metrics (last 30 days)
+    const userMetrics = await challengesService.getUserMetrics(userId, walletId);
+
+    // 7️⃣ Prepare personalized rules
+    const baseRules = selectedChallenge.rules as any;
+    const personalizedRules = { ...baseRules };
+
+    if (baseRules.min_spend_threshold && userMetrics.categorySpend) {
+      const userSpent = Math.abs(userMetrics.categorySpend[matchedCategory.id] ?? 0);
+      personalizedRules.min_spend_threshold = Math.max(
+        baseRules.min_spend_threshold ?? 1,
+        Math.round(userSpent * 0.8),
+      );
+    }
+
+    if (!baseRules.evaluation_window_days) {
+      personalizedRules.evaluation_window_days = 30;
+    }
+
+    if (baseRules.frequency_target) {
+      const freq = userMetrics.frequency[matchedCategory.name] ?? 0;
+      personalizedRules.frequency_target = Math.max(baseRules.frequency_target, freq);
+    }
+
+    personalizedRules.progress_target = baseRules.progress_target ?? 100;
+
+    // 8️⃣ Assign challenge as SUGGESTED with personalized rules
+    await userChallengesService.assignChallengeToUser(
+      selectedChallenge.id,
+      walletId,
+      personalizedRules,
+    );
+
+    const friendlyMessage = `I've suggested a challenge for you: "${selectedChallenge.title}" — ${selectedChallenge.description}. You've got ${personalizedRules.evaluation_window_days || 7} days. Start it from the Challenges screen whenever you're ready!`;
+
+    return {
+      success: true,
+      challenge: {
+        id: selectedChallenge.id,
+        title: selectedChallenge.title,
+        description: selectedChallenge.description,
+        rules: personalizedRules,
+      },
+      message: friendlyMessage,
+    };
+  },
+  {
+    name: 'assign_challenge',
+    description: `
+Suggest a challenge ONLY when user intent clearly matches an existing category from database.
+No guessing. No fallback. No cross-category suggestions.
+If no match → guide user to create custom goal.
+Respects the user's challenge cap (max 3 total, max 2 suggested) — will decline if already at cap.
+`,
+    schema: z.object({
+      userId: z.string(),
+      walletId: z.string(),
+      userInput: z.string(),
+    }),
+  },
+);
+```
+
+**Why personalization matters:** `min_spend_threshold` is adjusted to 80% of the user's actual recent spend in that category (never below the template's floor). A flat, un-personalized limit would be either trivially easy (irrelevant to a low spender) or impossibly hard (unfair to a high spender). Personalizing it against real `getUserMetrics` data makes the challenge meaningfully calibrated per user.
+
+**Why strict category matching, no fallback:** the tool description explicitly forbids guessing. Financial suggestions carry real weight — assigning the wrong challenge based on a loose keyword match (e.g. matching "car" to "Transportation" when the user meant something else) erodes trust in the AI's judgment. If nothing matches cleanly, the tool declines and redirects to Goals instead of guessing.
+
+### IncrementChallengeTool
+
+Called when a user explicitly reports progress in chat (e.g. "I avoided coffee today").
+
+**Original design flaw:** the schema required a `userId` parameter that the function body never used — dead input, and a missed opportunity for a safety check.
+
+**Final implementation:**
+
+```typescript
+export const IncrementChallengeTool = tool(
+  async ({
+    userId,
+    walletId,
+    challengeId,
+    amount,
+  }: {
+    userId: string;
+    walletId: string;
+    challengeId: string;
+    amount: number;
+  }) => {
+    if (amount <= 0 || amount > 50) {
+      return {
+        success: false,
+        message: 'Invalid amount. Must be between 1 and 50 progress points.',
+      };
+    }
+
+    // Safety check: ensure this challenge actually belongs to the requesting user
+    const userChallenge = await prisma.user_challenges.findFirst({
+      where: { wallet_id: walletId, OR: [{ challenge_id: challengeId }, { id: challengeId }] },
+      select: { user_id: true },
+    });
+
+    if (!userChallenge || userChallenge.user_id !== userId) {
+      return {
+        success: false,
+        message: 'Challenge not found for this user.',
+      };
+    }
+
+    const updatedChallenge = await userChallengesService.incrementProgressOrMarkCompleted(
+      walletId,
+      challengeId,
+      amount,
+    );
+
+    return {
+      success: true,
+      data: updatedChallenge,
+      message:
+        updatedChallenge.status === 'COMPLETED'
+          ? 'Challenge completed and reward granted!'
+          : `Challenge progress updated to ${updatedChallenge.progress}%`,
+    };
+  },
+  {
+    name: 'increment_challenge',
+    description: `
+Increment the progress of a user's ACTIVE challenge.
+
+Only call this when a user explicitly mentions an action related to a challenge
+(e.g. "I avoided coffee today", "I cooked at home this week").
+
+Do NOT call this for regular transactions — those are handled automatically.
+
+You must provide:
+- userId
+- walletId
+- challengeId: the challenge template id (challenges.id from app_context, NOT user_challenges.id)
+- amount: progress points to add (between 1 and 50)
+`,
+    schema: z.object({
+      userId: z.string(),
+      walletId: z.string(),
+      challengeId: z.string().describe('challenges.id from app_context — not user_challenges.id'),
+      amount: z.number().min(1).max(50),
+    }),
+  },
+);
+```
+
+**Why add the ownership check:** `challengeId` is AI-supplied from conversation context, not deterministically fetched. If the model ever hallucinates or carries over a stale ID from a different user's context, incrementing progress on the wrong person's challenge would be a real data integrity bug. The check costs one indexed query and closes that gap outright — using data (`userId`) the tool was already receiving but silently discarding.
+
+---
+
+## Transaction-Triggered Evaluation
+
+`evaluateChallengeProgress` runs on every transaction create, update, and delete. It's the reactive half of the system — the half that responds instantly to user behavior, as opposed to the cron jobs, which handle everything time-based or passive.
+
+**Why some logic lives here and not in cron:** anything that needs to react *the moment* a transaction happens — like an AVOID challenge failing the instant a disqualifying purchase is logged — can't wait for a daily cron run. A day's delay between the violation and the notification would feel broken; the user would keep thinking their challenge was still alive.
+
