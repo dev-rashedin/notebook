@@ -305,3 +305,585 @@ You must provide:
 
 **Why some logic lives here and not in cron:** anything that needs to react *the moment* a transaction happens — like an AVOID challenge failing the instant a disqualifying purchase is logged — can't wait for a daily cron run. A day's delay between the violation and the notification would feel broken; the user would keep thinking their challenge was still alive.
 
+```typescript
+export const evaluateChallengeProgress = async (
+  walletId: string,
+  transaction: {
+    categoryName: string;
+    categoryId: string;
+    amount: Decimal | number;
+    type: 'INCOME' | 'EXPENSE';
+  },
+) => {
+  if (transaction.type !== 'EXPENSE') return;
+
+  const activeChallenges = await prisma.user_challenges.findMany({
+    where: { wallet_id: walletId, status: 'ACTIVE' },
+    include: { challenges: { select: { type: true, title: true } } },
+  });
+
+  if (activeChallenges.length === 0) return;
+
+  for (const userChallenge of activeChallenges) {
+    const rules = userChallenge.rules as {
+      trigger_category?: string;
+      evaluation_window_days?: number;
+      min_spend_threshold?: number;
+      min_occurrences?: number;
+    } | null;
+
+    if (!rules?.trigger_category) continue;
+    if (rules.trigger_category.toLowerCase() !== transaction.categoryName.toLowerCase()) continue;
+
+    const challengeType = userChallenge.challenges?.type;
+    let increment = 0;
+
+    if (challengeType === 'LIMIT') {
+      const windowStart = dayjs
+        .utc(userChallenge.accepted_at ?? userChallenge.suggested_at)
+        .startOf('day')
+        .toDate();
+
+      const spendAgg = await prisma.transactions.aggregate({
+        where: {
+          wallet_id: walletId,
+          category_id: transaction.categoryId,
+          type: 'EXPENSE',
+          date: { gte: windowStart },
+        },
+        _sum: { amount: true },
+      });
+      const totalSpent = Math.abs(Number(spendAgg._sum.amount ?? 0));
+      const threshold = rules.min_spend_threshold ?? 1;
+      const spendRatio = Math.min(totalSpent / threshold, 1);
+      const newProgress = Math.round(spendRatio * 100);
+
+      await prisma.user_challenges.update({
+        where: { id: userChallenge.id },
+        data: { progress: newProgress, last_updated_at: new Date() },
+      });
+
+      const windowEnd = dayjs(userChallenge.accepted_at ?? userChallenge.suggested_at)
+        .add(rules.evaluation_window_days ?? 7, 'day')
+        .startOf('day');
+      const today = dayjs().startOf('day');
+      const windowExpired = today.isSame(windowEnd) || today.isAfter(windowEnd);
+
+      if (windowExpired && totalSpent < threshold && !userChallenge.completed_rewarded) {
+        await incrementProgressOrMarkCompleted(userChallenge.wallet_id, userChallenge.challenge_id, 100);
+      }
+      continue;
+    } else if (challengeType === 'FREQUENCY') {
+      increment = 10;
+    } else if (challengeType === 'AVOID') {
+      // Any matching transaction immediately fails an AVOID challenge
+      await prisma.user_challenges.update({
+        where: { id: userChallenge.id },
+        data: { status: 'EXPIRED', last_updated_at: new Date() },
+      });
+
+      await sendPushNotification({
+        userId: userChallenge.user_id,
+        title: 'Challenge Failed',
+        body: `Your "${userChallenge.challenges?.title}" challenge ended early due to a matching transaction.`,
+        type: 'CHALLENGE',
+        entityId: userChallenge.challenge_id,
+        invalidateKeys: ['user-challenges'],
+        data: { screen: 'Challenges' },
+      });
+      continue;
+    } else {
+      // STREAK, SAVE — not transaction-driven, handled entirely by the daily cron
+      continue;
+    }
+
+    if (increment > 0) {
+      await incrementProgressOrMarkCompleted(userChallenge.wallet_id, userChallenge.challenge_id, increment);
+    }
+  }
+};
+```
+
+**Why AVOID lives here but STREAK and SAVE don't:** AVOID's success condition is defined by the *absence* of a matching transaction — its failure condition is the *presence* of one, which is inherently event-driven. STREAK ("did the user log something today") and SAVE ("what's the net income-minus-expenses so far") are both aggregate, time-window questions that only make sense to answer once per day, not on every individual transaction. Trying to evaluate a streak or savings target on every transaction would be both wasteful (recomputing the same daily aggregate repeatedly) and semantically wrong (a single transaction doesn't determine a streak).
+
+---
+
+## Cron Jobs
+
+Five daily jobs were built, each with a distinct, non-overlapping responsibility. All run via `node-cron` against `config.cron_timezone` (Europe/Stockholm).
+
+### 1. `expiredSuggestionsCleanupJob`
+
+**Purpose:** deletes `SUGGESTED` challenges nobody ever accepted, after 2 weeks.
+
+```typescript
+// Cron: Deletes SUGGESTED challenges that were never accepted within 2 weeks (hard delete).
+export const expiredSuggestionsCleanupJob = () => {
+  cron.schedule(
+    '30 2 * * *',
+    async () => {
+      try {
+        const result = await prisma.user_challenges.deleteMany({
+          where: {
+            status: 'SUGGESTED',
+            accepted_at: null,
+            suggested_at: { lt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
+          },
+        });
+        console.log(`[ExpiredSuggestionsCleanup] Deleted ${result.count} unaccepted suggestions`);
+      } catch (err) {
+        console.error('[ExpiredSuggestionsCleanup] Failed:', err);
+      }
+    },
+    config.cron_timezone,
+  );
+};
+```
+
+**Why hard delete, no status transition:** unlike resolved challenges (which carry analytical value), an unaccepted suggestion represents a decision the user never made. There's nothing to learn from it that the raw suggestion count elsewhere in the system doesn't already tell you. Keeping the row around indefinitely just accumulates clutter blocking the suggestion cap slot it was occupying.
+
+### 2. `expiredChallengesJob` — the core resolution engine
+
+**Purpose:** the single daily pass that resolves every ACTIVE challenge type. This is the most complex job in the system, because each challenge type has fundamentally different resolution logic.
+
+```typescript
+// Cron: Daily evaluation and resolution for all ACTIVE challenges.
+// - AVOID: increments time-based progress daily; completes once the window ends violation-free
+//   (violations are caught instantly elsewhere, in evaluateChallengeProgress).
+// - STREAK: checks for a transaction logged yesterday; increments progress on a hit, resets
+//   progress to 0 with a "streak broken" notification on a miss, and expires only if the
+//   evaluation window closes before reaching 100%.
+// - SAVE: recalculates net savings (income − expenses) since the challenge started and updates
+//   progress to reflect real savings, completing once the threshold is met.
+// - LIMIT / FREQUENCY: resolved once, the day after the evaluation window closes — LIMIT gets a
+//   safety-net check (marks COMPLETED if spend stayed under threshold even without a final
+//   triggering transaction), otherwise the challenge is marked EXPIRED.
+// All resolutions (COMPLETED/EXPIRED) send a push notification to the user.
+import dayjs from 'dayjs';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+dayjs.extend(isSameOrAfter);
+import cron from 'node-cron';
+import prisma from '../lib/prisma';
+import { sendPushNotification } from '../lib/push-notification';
+import { userChallengesService } from '../app/modules/challenges/user-challenges.service';
+import config from '../app/config';
+
+const expireChallenge = async (uc: any) => {
+  await prisma.user_challenges.update({
+    where: { id: uc.id },
+    data: { status: 'EXPIRED', last_updated_at: new Date() },
+  });
+  await sendPushNotification({
+    userId: uc.user_id,
+    title: 'Challenge Expired',
+    body: `Your "${uc.challenges.title}" challenge has ended.`,
+    type: 'CHALLENGE',
+    entityId: uc.challenge_id,
+    invalidateKeys: ['user-challenges'],
+    data: { screen: 'Challenges' },
+  });
+};
+
+export const expiredChallengesJob = () => {
+  cron.schedule(
+    '0 9 * * *',
+    async () => {
+      try {
+        const activeChallenges = await prisma.user_challenges.findMany({
+          where: { status: 'ACTIVE' },
+          include: { challenges: { select: { title: true, type: true } } },
+        });
+
+        const now = dayjs();
+        let expiredCount = 0;
+        let limitResolvedCount = 0;
+
+        for (const uc of activeChallenges) {
+          const rules = uc.rules as {
+            evaluation_window_days?: number;
+            min_spend_threshold?: number;
+            trigger_category?: string;
+          } | null;
+          const windowDays = rules?.evaluation_window_days ?? 30;
+
+          const startDate = uc.accepted_at ?? uc.suggested_at;
+          if (!startDate) continue;
+
+          const deadline = dayjs(startDate).add(windowDays, 'day');
+          const pastDeadline = now.isSameOrAfter(deadline);
+
+          // AVOID
+          if (uc.challenges.type === 'AVOID') {
+            if (pastDeadline) {
+              await userChallengesService.incrementProgressOrMarkCompleted(uc.wallet_id, uc.challenge_id, 100);
+            } else {
+              const elapsedDays = now.diff(dayjs(startDate), 'day');
+              const newProgress = Math.min(Math.round((elapsedDays / windowDays) * 100), 100);
+              if (newProgress !== uc.progress) {
+                await prisma.user_challenges.update({
+                  where: { id: uc.id },
+                  data: { progress: newProgress, last_updated_at: new Date() },
+                });
+              }
+            }
+            continue;
+          }
+
+          // STREAK
+          if (uc.challenges.type === 'STREAK') {
+            const yesterdayStart = now.subtract(1, 'day').startOf('day').toDate();
+            const yesterdayEnd = now.startOf('day').toDate();
+
+            const txCount = await prisma.transactions.count({
+              where: { wallet_id: uc.wallet_id, date: { gte: yesterdayStart, lt: yesterdayEnd } },
+            });
+
+            let newProgress = uc.progress;
+
+            if (txCount > 0) {
+              newProgress = Math.min(uc.progress + Math.round(100 / windowDays), 100);
+              if (newProgress >= 100) {
+                await userChallengesService.incrementProgressOrMarkCompleted(uc.wallet_id, uc.challenge_id, 100);
+              } else {
+                await prisma.user_challenges.update({
+                  where: { id: uc.id },
+                  data: { progress: newProgress, last_updated_at: new Date() },
+                });
+              }
+            } else if (uc.progress > 0) {
+              newProgress = 0;
+              await prisma.user_challenges.update({
+                where: { id: uc.id },
+                data: { progress: 0, last_updated_at: new Date() },
+              });
+              await sendPushNotification({
+                userId: uc.user_id,
+                title: 'Streak Broken 💔',
+                body: `Your "${uc.challenges.title}" streak reset — log a transaction today to start again!`,
+                type: 'CHALLENGE',
+                entityId: uc.challenge_id,
+                invalidateKeys: ['user-challenges'],
+                data: { screen: 'Challenges' },
+              });
+            }
+
+            if (pastDeadline && newProgress < 100) await expireChallenge(uc);
+            continue;
+          }
+
+          // SAVE
+          if (uc.challenges.type === 'SAVE') {
+            const savingsAgg = await prisma.transactions.groupBy({
+              by: ['type'],
+              where: { wallet_id: uc.wallet_id, date: { gte: startDate } },
+              _sum: { amount: true },
+            });
+
+            const income = Math.abs(savingsAgg.find(t => t.type === 'INCOME')?._sum.amount?.toNumber() ?? 0);
+            const expenses = Math.abs(savingsAgg.find(t => t.type === 'EXPENSE')?._sum.amount?.toNumber() ?? 0);
+            const netSavings = income - expenses;
+
+            const threshold = rules?.min_spend_threshold ?? 1;
+            const newProgress = Math.min(Math.max(Math.round((netSavings / threshold) * 100), 0), 100);
+
+            if (newProgress >= 100) {
+              await userChallengesService.incrementProgressOrMarkCompleted(uc.wallet_id, uc.challenge_id, 100);
+            } else if (newProgress !== uc.progress) {
+              await prisma.user_challenges.update({
+                where: { id: uc.id },
+                data: { progress: newProgress, last_updated_at: new Date() },
+              });
+            }
+
+            if (pastDeadline && newProgress < 100) await expireChallenge(uc);
+            continue;
+          }
+
+          // LIMIT / FREQUENCY — resolved once, the day after deadline
+          const expiredYesterday =
+            deadline.isAfter(now.subtract(2, 'day')) && deadline.isBefore(now.startOf('day'));
+          if (!expiredYesterday || uc.progress >= 100) continue;
+
+          if (uc.challenges.type === 'LIMIT' && rules?.trigger_category) {
+            const spendAgg = await prisma.transactions.aggregate({
+              where: {
+                wallet_id: uc.wallet_id,
+                type: 'EXPENSE',
+                date: { gte: startDate },
+                categories: { name: rules.trigger_category },
+              },
+              _sum: { amount: true },
+            });
+            const totalSpent = Math.abs(Number(spendAgg._sum.amount ?? 0));
+            const threshold = rules.min_spend_threshold ?? 1;
+
+            if (totalSpent < threshold) {
+              await userChallengesService.incrementProgressOrMarkCompleted(uc.wallet_id, uc.challenge_id, 100);
+              limitResolvedCount++;
+              continue;
+            }
+          }
+
+          await expireChallenge(uc);
+          expiredCount++;
+        }
+
+        console.log(
+          `[ExpiredChallenges] Expired ${expiredCount}, resolved ${limitResolvedCount} via LIMIT safety-net`,
+        );
+      } catch (err) {
+        console.error('[ExpiredChallenges] Failed:', err);
+      }
+    },
+    config.cron_timezone,
+  );
+};
+```
+
+**Why one job handles five different resolution strategies instead of five separate jobs:** all five types share the same iteration surface (`ACTIVE` challenges) and the same daily cadence. Splitting them into separate jobs would mean five separate queries fetching largely overlapping data, and — more importantly — five places where the deadline-calculation logic (`rules.evaluation_window_days`, `pastDeadline`) could drift out of sync with each other if one got updated and the others didn't. One job, branching by type, keeps the shared primitives (deadline math, `expireChallenge`) genuinely shared.
+
+**A real bug caught during this design (worth documenting):** an early version of the STREAK/SAVE branches checked the stale `uc.progress` (fetched before the loop's mutations) when deciding whether to also expire the challenge. This meant a challenge that had *just* been marked COMPLETED in the same pass could immediately be marked EXPIRED right after — because the deadline check was comparing against the old, pre-update progress value. Fixed by tracking `newProgress` locally within each branch and using that for the expiry decision instead.
+
+**The LIMIT safety-net, explained:** `evaluateChallengeProgress` normally resolves a LIMIT challenge's final outcome only when a *transaction* triggers the check near the window's end. But if the user simply doesn't transact again in that category after their last purchase, nothing ever fires that final check — the challenge would sit at, say, 40% progress forever, even if the user genuinely succeeded (stayed under threshold). The safety-net closes this: the cron independently re-checks total spend against the threshold once the window has closed, regardless of whether a transaction happened to trigger it.
+
+### 3. `oldChallengesCleanupJob`
+
+**Purpose:** purges resolved challenge history after 3 months.
+
+```typescript
+// Cron: Hard-deletes COMPLETED and EXPIRED challenges older than 3 months (history cleanup).
+export const oldChallengesCleanupJob = () => {
+  cron.schedule(
+    '0 4 * * *',
+    async () => {
+      try {
+        const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        const result = await prisma.user_challenges.deleteMany({
+          where: {
+            OR: [
+              { status: 'COMPLETED', completed_at: { lt: threeMonthsAgo } },
+              { status: 'EXPIRED', last_updated_at: { lt: threeMonthsAgo } },
+            ],
+          },
+        });
+        console.log(`[OldChallengesCleanup] Deleted ${result.count} old COMPLETED/EXPIRED challenges`);
+      } catch (err) {
+        console.error('[OldChallengesCleanup] Failed:', err);
+      }
+    },
+    config.cron_timezone,
+  );
+};
+```
+
+**Why `completed_at` for COMPLETED but `last_updated_at` for EXPIRED:** `EXPIRED` challenges never set `completed_at` (only successful ones do) — `last_updated_at` is the only timestamp reliably set at the moment either outcome occurs, since `expireChallenge` explicitly sets it.
+
+### 4. `proactiveSuggestionJob` — solving the "no regular challenges" problem
+
+**Purpose:** this is the direct fix for the original complaint (the CEO never receiving challenges). It runs daily, scans every wallet, and — for users under the concurrency cap — assigns a new challenge based on real spending metrics, without requiring any chat interaction.
+
+```typescript
+// Cron: Proactively suggests a new challenge to users under the suggestion cap, based on their
+// actual spending patterns (category-matched) or global habit-building challenges. Picks are
+// prioritized via the shared pickBestCandidate helper: never-assigned > previously failed >
+// previously succeeded, random among ties. Cap enforced via shared isUnderChallengeCap helper —
+// same logic AssignChallengeTool uses, so both stay in sync.
+import cron from 'node-cron';
+import prisma from '../lib/prisma';
+import { sendPushNotification } from '../lib/push-notification';
+import { userChallengesService } from '../app/modules/challenges/user-challenges.service';
+import { challengesService } from '../app/modules/challenges/challenges.service';
+import config from '../app/config';
+
+export const proactiveSuggestionJob = () => {
+  cron.schedule(
+    '0 10 * * *',
+    async () => {
+      try {
+        const wallets = await prisma.wallets.findMany({
+          select: { id: true, owner_id: true, name: true },
+        });
+
+        let assignedCount = 0;
+
+        for (const wallet of wallets) {
+          const userId = wallet.owner_id;
+
+          const underCap = await userChallengesService.isUnderChallengeCap(userId);
+          if (!underCap) continue;
+
+          const metrics = await challengesService.getUserMetrics(userId, wallet.id);
+          const spentCategoryIds = Object.keys(metrics.categorySpend).filter(
+            id => Math.abs(metrics.categorySpend[id]) > 0,
+          );
+
+          const categories = spentCategoryIds.length
+            ? await prisma.categories.findMany({
+                where: { id: { in: spentCategoryIds } },
+                select: { id: true, name: true },
+              })
+            : [];
+          const nameToId = new Map(categories.map(c => [c.name, c.id]));
+
+          const allChallenges = await prisma.challenges.findMany({ where: { is_active: true } });
+
+          const candidates = allChallenges.filter(ch => {
+            const rules = ch.rules as { trigger_category?: string } | null;
+            if (!rules?.trigger_category) return true; // global — always a candidate
+            return nameToId.has(rules.trigger_category);
+          });
+
+          if (candidates.length === 0) continue;
+
+          const chosen = await userChallengesService.pickBestCandidate(userId, candidates);
+
+          const baseRules = chosen.rules as any;
+          const personalizedRules = { ...baseRules };
+
+          if (baseRules?.min_spend_threshold && baseRules?.trigger_category) {
+            const categoryId = nameToId.get(baseRules.trigger_category);
+            const userSpent = categoryId ? Math.abs(metrics.categorySpend[categoryId] ?? 0) : 0;
+            personalizedRules.min_spend_threshold = Math.max(
+              baseRules.min_spend_threshold ?? 1,
+              Math.round(userSpent * 0.8),
+            );
+          }
+
+          await userChallengesService.assignChallengeToUser(chosen.id, wallet.id, personalizedRules);
+
+          await sendPushNotification({
+            userId,
+            title: 'New Challenge Suggested! 💡',
+            body: `We picked "${chosen.title}" for your "${wallet.name}" wallet — check it out on the Challenges screen.`,
+            type: 'CHALLENGE',
+            entityId: chosen.id,
+            invalidateKeys: ['user-challenges'],
+            data: { screen: 'Challenges' },
+          });
+
+          assignedCount++;
+        }
+
+        console.log(`[ProactiveSuggestion] Assigned ${assignedCount} new challenge suggestions`);
+      } catch (err) {
+        console.error('[ProactiveSuggestion] Failed:', err);
+      }
+    },
+    config.cron_timezone,
+  );
+};
+```
+
+**Why daily cron and not per-transaction:** proactive suggestion is fundamentally a discovery problem — "here's something you *haven't* been doing" — evaluated against a 30-day rolling view of spending (`getUserMetrics`), not a single event. Running this per-transaction would mean redundant recomputation on every logged expense and risk firing multiple suggestion attempts in rapid succession if a user logs several transactions in one sitting. A daily cadence naturally throttles this to one meaningful check per day.
+
+**Why global (non-category) challenges are included as candidates:** initially the job only considered category-matched challenges (LIMIT/AVOID/FREQUENCY tied to actual spending categories). But this meant users with weak or scattered spending patterns — or ones who'd exhaust their obvious category matches — would never see habit-building challenges like "Track Expenses Daily." Including global challenges in the same candidate pool, subject to the same tier-priority picking, ensures variety without requiring a special-case fallback path.
+
+### 5. `reactivationJob` — the inactivity-driven flows
+
+**Purpose:** re-engage users who've gone quiet, through two independent signals.
+
+```typescript
+// Cron: Reactivation checks for lapsed users.
+// - No transaction logged in 14 days → assign "Get Back on Track" challenge (respects the same
+//   SUGGESTED+ACTIVE cap as the proactive suggestion job) + notification.
+// - No app open (users.last_active_at) in 14/21 days → notification only, no challenge. Computed
+//   live off last_active_at age — no dedup field needed, fires once at day 14, once at day 21.
+import cron from 'node-cron';
+import dayjs from 'dayjs';
+import prisma from '../lib/prisma';
+import { sendPushNotification } from '../lib/push-notification';
+import { userChallengesService } from '../app/modules/challenges/user-challenges.service';
+import config from '../app/config';
+
+const GET_BACK_ON_TRACK_TITLE = 'Get Back on Track';
+
+export const reactivationJob = () => {
+  cron.schedule(
+    '0 11 * * *',
+    async () => {
+      try {
+        const now = dayjs();
+        let noTxChallengeCount = 0;
+        let noTxNotifCount = 0;
+        let noOpenNotifCount = 0;
+
+        // ── Check 1: No transaction in 14 days → challenge + notification ──
+        const usersWithWallets = await prisma.users.findMany({
+          select: {
+            id: true,
+            created_at: true,
+            wallets: { select: { id: true, name: true } },
+          },
+        });
+
+        const getBackOnTrackChallenge = await prisma.challenges.findFirst({
+          where: { title: GET_BACK_ON_TRACK_TITLE, is_active: true },
+        });
+
+        for (const user of usersWithWallets) {
+          if (user.wallets.length === 0) continue;
+
+          const lastTx = await prisma.transactions.findFirst({
+            where: { user_id: user.id },
+            orderBy: { date: 'desc' },
+            select: { date: true },
+          });
+
+          const baselineDate = lastTx?.date ?? user.created_at; // fallback if never transacted
+          const daysSinceLastTx = now.diff(dayjs(baselineDate), 'day');
+          if (daysSinceLastTx !== 14) continue;
+
+          const [suggestedCount, activeCount] = await Promise.all([
+            prisma.user_challenges.count({ where: { user_id: user.id, status: 'SUGGESTED' } }),
+            prisma.user_challenges.count({ where: { user_id: user.id, status: 'ACTIVE' } }),
+          ]);
+
+          const primaryWallet = user.wallets[0];
+
+          if (getBackOnTrackChallenge && suggestedCount + activeCount < 3 && suggestedCount < 2) {
+            await userChallengesService.assignChallengeToUser(getBackOnTrackChallenge.id, primaryWallet.id);
+            noTxChallengeCount++;
+          }
+
+          await sendPushNotification({
+            userId: user.id,
+            title: 'We miss your logs 📉',
+            body: `You haven't logged a transaction in 2 weeks. Let's get back on track!`,
+            type: 'CHALLENGE',
+            invalidateKeys: ['user-challenges'],
+            data: { screen: 'Challenges' },
+          });
+          noTxNotifCount++;
+        }
+
+        // ── Check 2: No app open in 14/21 days → notification only ──
+        const inactiveUsers = await prisma.users.findMany({
+          select: { id: true, last_active_at: true },
+        });
+
+        for (const user of inactiveUsers) {
+          const daysSinceActive = now.diff(dayjs(user.last_active_at), 'day');
+
+          if (daysSinceActive === 14) {
+            await sendPushNotification({
+              userId: user.id,
+              title: 'Come back to Aivinn 👋',
+              body: `It's been 2 weeks — your finances are waiting for you!`,
+              type: 'SYSTEM',
+              invalidateKeys: [],
+              data: { screen: 'Home' },
+            });
+            noOpenNotifCount++;
+          } else if (daysSinceActive === 21) {
+            await sendPushNotification({
+              userId: user.id,
+              title: 'We still miss you 💙',
+              body: `It's been 3 weeks since you last opened Aivinn. We're here whenever you're ready.`,
+              type: 'SYSTEM',
+              invalidateKeys: [],
+              data: { screen: 'Home' },
+            });
+            noOpenNotifCount++;
+          }
+        }
+
