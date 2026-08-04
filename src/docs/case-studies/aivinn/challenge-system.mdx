@@ -887,3 +887,138 @@ export const reactivationJob = () => {
           }
         }
 
+        console.log(
+          `[Reactivation] No-tx: ${noTxChallengeCount} challenges, ${noTxNotifCount} notifs. No-open: ${noOpenNotifCount} notifs.`,
+        );
+      } catch (err) {
+        console.error('[Reactivation] Failed:', err);
+      }
+    },
+    config.cron_timezone,
+  );
+};
+```
+
+**Why two independent checks instead of one:** "hasn't logged a transaction" and "hasn't opened the app" are different failure modes with different fixes. A user might open the app daily to check balances but never log anything (transaction-lapse without app-lapse), or vice versa. Conflating them into one signal would mean sending the wrong message to the wrong situation — e.g. offering a "log for 10 days" challenge to someone who hasn't even opened the app to see it.
+
+**Why the transaction-lapse gets a challenge but the app-lapse only gets a notification:** a challenge needs the user to be *present* to accept it — pre-assigning one to someone who isn't opening the app creates ambiguous state (when does the challenge's clock start if they're not around to start it?). The app-open nudge is a simpler, lower-commitment ask: just come back. Once they do, the proactive suggestion job or the transaction-lapse check can take over naturally.
+
+**A known limitation, documented but deliberately deferred:** both checks use exact-day matching (`daysSinceLastTx !== 14`, `daysSinceActive === 14`). If the cron job doesn't run on the exact day a user crosses the threshold (server downtime, deploy window, etc.), that user is silently skipped forever for that cycle — there's no catch-up mechanism, unlike `expiredChallengesJob`'s 2-day window check. This mirrors a bug class we fixed elsewhere in the system, and is flagged here as a known follow-up rather than solved immediately, to avoid scope creep mid-build.
+
+---
+
+## Shared Logic & Deduplication
+
+Two pieces of logic were duplicated across `AssignChallengeTool` and `proactiveSuggestionJob` early in the build — the concurrency cap check, and the "which candidate to pick" tier logic. Left duplicated, any future change to the cap rule or picking algorithm would require remembering to update both places, risking silent drift between the chat-triggered and cron-triggered assignment paths.
+
+```typescript
+// Checks if a user is under the suggestion/active cap (max 3 total, max 2 SUGGESTED)
+const isUnderChallengeCap = async (userId: string) => {
+  const [suggestedCount, activeCount] = await Promise.all([
+    prisma.user_challenges.count({ where: { user_id: userId, status: 'SUGGESTED' } }),
+    prisma.user_challenges.count({ where: { user_id: userId, status: 'ACTIVE' } }),
+  ]);
+  return suggestedCount + activeCount < 3 && suggestedCount < 2;
+};
+
+const TIER_RANK: Record<string, number> = {
+  never_assigned: 0,
+  EXPIRED: 1,
+  COMPLETED: 2,
+};
+
+// Picks the best candidate from a list of challenge templates based on the user's history:
+// never-assigned > previously failed > previously succeeded, random among ties.
+const pickBestCandidate = async <T extends { id: string }>(
+  userId: string,
+  candidates: T[],
+): Promise<T> => {
+  const pastAttempts = await prisma.user_challenges.findMany({
+    where: {
+      user_id: userId,
+      challenge_id: { in: candidates.map(c => c.id) },
+      status: { in: ['EXPIRED', 'COMPLETED'] },
+    },
+    orderBy: { last_updated_at: 'desc' },
+  });
+
+  const mostRecentStatus = new Map<string, string>();
+  for (const attempt of pastAttempts) {
+    if (!mostRecentStatus.has(attempt.challenge_id)) {
+      mostRecentStatus.set(attempt.challenge_id, attempt.status);
+    }
+  }
+
+  let bestTier = Infinity;
+  let bestCandidates: T[] = [];
+
+  for (const ch of candidates) {
+    const status = mostRecentStatus.get(ch.id) ?? 'never_assigned';
+    const tier = TIER_RANK[status];
+    if (tier < bestTier) {
+      bestTier = tier;
+      bestCandidates = [ch];
+    } else if (tier === bestTier) {
+      bestCandidates.push(ch);
+    }
+  }
+
+  return bestCandidates[Math.floor(Math.random() * bestCandidates.length)];
+};
+
+export const userChallengesService = {
+  // ...existing exports
+  isUnderChallengeCap,
+  pickBestCandidate,
+};
+```
+
+**Why "most recent status per challenge" rather than "ever succeeded/failed":** a user could theoretically fail a challenge once, then succeed at it later on a subsequent attempt. Ranking by the *most recent* outcome (rather than "has this ever happened") reflects their current relationship with that specific challenge, not a permanent historical record. A past failure shouldn't permanently deprioritize a challenge the user has since mastered — likewise, a past success shouldn't stay marked as "highest priority to avoid repeating" if they later failed it in a subsequent attempt.
+
+**Why successful challenges stay eligible (just lowest priority) instead of being excluded forever:** habits regress. A user who beat "Limit Coffee Spending" three months ago might benefit from being offered it again if their spending drifts back up. Permanently excluding successes would mean the pool of assignable challenges shrinks monotonically over time for engaged users — eventually leaving nothing to suggest.
+
+**Generic typing (`<T extends { id: string }>`):** `pickBestCandidate` is called with two different shapes — a lean `{ id: string }` list in early drafts, and the full `challenges` row (with `title`, `description`, `rules`) in the final version. Making it generic means the function preserves whatever fields the caller passed in, avoiding a TypeScript error where properties like `.rules` or `.title` would otherwise be typed away.
+
+---
+
+## Testing & Verification
+
+Rather than deploying to trigger these on their real daily schedule, verification was done directly against the running dev server — cron jobs execute identically regardless of environment, so no deployment was needed.
+
+**Method:** each job's `cron.schedule(...)` expression was temporarily set a few minutes ahead of the current server time (in `config.cron_timezone`), combined with direct SQL manipulation of the relevant timestamps to simulate the conditions each job checks for:
+
+```sql
+-- Simulate 14 days of no app activity
+UPDATE users SET last_active_at = NOW() - INTERVAL '14 days' WHERE id = '...';
+
+-- Simulate 14 days of no transactions
+UPDATE transactions SET date = NOW() - INTERVAL '14 days' WHERE id = '...';
+
+-- Simulate a challenge past its evaluation window
+UPDATE user_challenges SET accepted_at = NOW() - INTERVAL '8 days' WHERE id = '...';
+```
+
+Each job also received a start-of-execution `console.log` (e.g. `[Reactivation] Job started at ...`), separate from its end-of-run summary log, so a run could be confirmed as having fired even before checking database state.
+
+**Bugs caught during this process:**
+1. A `null as any` cast used to work around a Prisma type error actually still evaluated to a real `null` at runtime, which Prisma rejects outright for `not: null` filters — resolved by discovering `last_active_at` was non-nullable in the schema, making the filter unnecessary entirely.
+2. The STREAK/SAVE stale-progress expiry bug described earlier (a challenge could be marked COMPLETED and EXPIRED in the same pass) — caught during code review before it ever reached production testing.
+
+**Verified working end-to-end:**
+- `reactivationJob`: both the no-transaction (challenge + notification) and no-app-open (notification only) paths.
+- `proactiveSuggestionJob`: correctly assigned a second challenge to a user already holding one, respecting the concurrency cap and picking from real spending-category matches.
+- `expiredChallengesJob`: confirmed both an AVOID challenge resolving to COMPLETED (survived its window with no violation) and a STREAK challenge resolving to EXPIRED (missed days, reset, then ran out its window) in the same test run.
+
+---
+
+## Lessons Learned
+
+1. **Schema fields that "could" diverge eventually will.** The `duration_days` vs. `rules.evaluation_window_days` mismatch wasn't hypothetical — the personalization logic already only ever touched one of them, meaning any challenge template without an explicit `evaluation_window_days` in its rules would silently disagree with its own `duration_days` the moment it got personalized.
+
+2. **"Simple" defaults (e.g. skip personalization) often aren't actually simpler in outcome** — they just move the complexity into user experience inconsistency instead of code. The decision to add personalization to `proactiveSuggestionJob` even though it complicated the code slightly was the right call, because the alternative (identical challenge terms for every user regardless of spending) would have undermined the point of proactive suggestion.
+
+3. **Deferred scope should be written down, not just remembered.** Sub-category granularity (e.g. distinguishing Uber from bus within "Transportation"), sentiment-triggered challenge assignment, and the exact-day-match fragility in `reactivationJob` were all identified mid-build and explicitly parked rather than solved immediately — kept out of scope creep, but captured for a planned full-system review rather than lost.
+
+4. **Cap and picking logic belonging in two places instead of one is a latent bug waiting to happen.** Extracting `isUnderChallengeCap` and `pickBestCandidate` into shared functions wasn't just a cleanliness pass — it closed a real risk where the chat-triggered and cron-triggered assignment paths could silently diverge in behavior after any future tweak to either.
+
+5. **Test by simulating time, not by waiting for it.** Manipulating timestamps directly and temporarily shifting cron schedules a few minutes ahead made it possible to verify five distinct time-dependent behaviors (14-day inactivity, 21-day inactivity, 7-day AVOID window, 10-day STREAK window, deadline-crossing expiry) all within a single working session, without needing to wait real days between each test.
