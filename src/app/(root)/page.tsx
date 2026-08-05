@@ -1,14 +1,10 @@
-import {
-  Footer,
-  Hero,
-} from '@/components/HomePageSections';
+import Footer from "@/components/ui/Footer";
+import Hero from "@/components/ui/Hero";
 
 export default function HomePage() {
   return (
     <>
-      <section className="space-y-40">
-        <Hero />
-      </section>
+      <Hero />
       <Footer />
     </>
   );
