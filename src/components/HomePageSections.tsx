@@ -9,10 +9,6 @@ const DevFeedback = dynamic(() => import('@/components/ui/Home/DevFeedback'), {
   ssr: false,
 });
 
-const HowItWorks = dynamic(() => import('@/components/ui/Home/HowItWorks'), {
-  loading: () => <LoadingSkeleton />,
-  ssr: false,
-});
 
 
 const ContributeSection = dynamic(() => import('@/components/ui/Home/ContributeSection'), {
@@ -24,4 +20,4 @@ const FinalCTA = dynamic(() => import('@/components/ui/Home/FinalCTA'), {
   ssr: false,
 });
 
-export { Hero, DevFeedback, HowItWorks, ContributeSection, FinalCTA, Footer };
+export { Hero, DevFeedback, ContributeSection, FinalCTA, Footer };
