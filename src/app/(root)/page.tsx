@@ -1,6 +1,5 @@
 import {
   ContributeSection,
-  DevFeedback,
   FinalCTA,
   Footer,
   Hero,
@@ -11,8 +10,6 @@ export default function HomePage() {
     <>
       <section className="space-y-40">
         <Hero />
-   
-        <DevFeedback />
         <ContributeSection />
         <FinalCTA />
       </section>
