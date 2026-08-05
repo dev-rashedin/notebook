@@ -1,27 +1,4 @@
-import { CgNpm } from 'react-icons/cg';
-import {
-  FaBolt,
-  FaCodeBranch,
-  FaCubes,
-  FaDiscord,
-  FaGithub,
-  FaLaptopCode,
-  FaMagic,
-  FaPlug,
-  FaRocket,
-  FaServer,
-  FaTerminal,
-} from 'react-icons/fa';
-import { FiEdit, FiMoon } from 'react-icons/fi';
-import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
-import { IoCloseCircleOutline, IoSunnyOutline } from 'react-icons/io5';
-import {
-  RiArrowRightDoubleFill,
-  RiArrowRightSLine,
-  RiMenu2Fill,
-  RiMenu3Fill,
-} from 'react-icons/ri';
-import { SiBun, SiDeno, SiPnpm, SiYarn } from 'react-icons/si';
+
 
 export const navItems = [
   { label: 'Case Studies', to: '/case-studies' },
@@ -150,22 +127,4 @@ export const steps = [
   },
 ];
 
-export {
-  CgNpm,
-  FaDiscord,
-  FaGithub,
-  FiEdit,
-  FiMoon,
-  IoCloseCircleOutline,
-  IoIosArrowDown,
-  IoIosArrowUp,
-  IoSunnyOutline,
-  RiArrowRightDoubleFill,
-  RiArrowRightSLine,
-  RiMenu2Fill,
-  RiMenu3Fill,
-  SiBun,
-  SiDeno,
-  SiPnpm,
-  SiYarn,
-};
+
