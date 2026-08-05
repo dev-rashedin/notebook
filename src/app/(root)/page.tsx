@@ -1,10 +1,12 @@
-import { Github, Linkedin, Mail, Globe } from 'lucide-react';
+import { FaGithub, FaLinkedin } from 'react-icons/fa';
+import { HiOutlineMail } from 'react-icons/hi';
+import { HiOutlineGlobeAlt } from 'react-icons/hi';
 
 const SOCIALS = [
-  { label: 'GitHub', href: 'https://github.com/dev-rashedin', icon: Github },
-  { label: 'LinkedIn', href: 'https://linkedin.com/in/dev-rashedin', icon: Linkedin },
-  { label: 'Email', href: 'mailto:rashedinislam.06@gmail.com', icon: Mail },
-  { label: 'Portfolio', href: 'https://www.rashedin.dev', icon: Globe },
+  { label: 'GitHub', href: 'https://github.com/dev-rashedin', icon: FaGithub },
+  { label: 'LinkedIn', href: 'https://linkedin.com/in/dev-rashedin', icon: FaLinkedin },
+  { label: 'Email', href: 'mailto:rashedinislam.06@gmail.com', icon: HiOutlineMail },
+  { label: 'Portfolio', href: 'https://www.rashedin.dev', icon: HiOutlineGlobeAlt },
 ];
 
 function todayStamp() {
@@ -14,13 +16,7 @@ function todayStamp() {
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#F3EFE4] text-black flex flex-col">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        .font-serif { font-family: 'Source Serif 4', Georgia, serif; }
-        .font-display { font-family: 'Playfair Display', Georgia, serif; }
-        .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-      `}</style>
+    <main className=" flex flex-col">
 
       <div className="max-w-3xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
         {/* top bar */}
@@ -60,7 +56,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-black/20">
             {SOCIALS.map(({ label, href, icon: Icon }) => (
-              
+              <a
                 key={label}
                 href={href}
                 target="_blank"
