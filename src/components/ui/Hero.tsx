@@ -1,7 +1,5 @@
 import Link from 'next/link';
 import { Button } from './CustomButton';
-import { FaGithub } from '@/data';
-
 const Hero = () => {
   return (
     <main className="min-h-[92vh] max-w-3xl  mx-auto flex-col-center text-center px-4">
@@ -28,7 +26,7 @@ const Hero = () => {
             target="_blank"
             className="flex-center gap-2"
           >
-            <FaGithub style={{ height: '1.2em', width: '1.2em' }} />
+        
             GitHub
           </Link>
         </Button>

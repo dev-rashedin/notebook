@@ -1,4 +1,7 @@
-import { RiArrowRightSLine, RiMenu2Fill } from '@/data';
+import {
+  RiArrowRightSLine,
+  RiMenu2Fill
+} from 'react-icons/ri';
 import { useSidebar } from '@/components/SidebarToggleContext';
 
 const SecondaryNav = ({ pathname }: { pathname: string }) => {

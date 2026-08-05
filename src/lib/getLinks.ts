@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { docsOrder, nestedDocsOrder } from '@/data';
+import { docsOrder, nestedDocsOrder } from '@/constant';
 
 export function getContentLinks(endpoint: string) {
   const dir = path.join(process.cwd(), 'src', 'docs', endpoint);

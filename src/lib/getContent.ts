@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import { extractHeadingsFromMdx } from './mdx';
 import { MDXComponents } from '@/components/MDXComponent';
-import { docsOrder, nestedDocsOrder } from '@/data';
+import { docsOrder, nestedDocsOrder } from '@/constant';
 
 async function getContent(endpoint: string, slug: string) {
   const baseDir = path.join(process.cwd(), 'src', 'docs', endpoint);

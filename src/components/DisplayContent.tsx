@@ -3,7 +3,7 @@ import DisplayHeadings from './DisplayHeadings';
 import Divider from './ui/CustomDivider';
 import RightSidebarPortal from './RightSidebarPortal';
 import { getContent } from '@/lib';
-import { FiEdit } from '@/data';
+import { FiEdit } from 'react-icons/fi';
 
 interface Props {
   endpoint: string;

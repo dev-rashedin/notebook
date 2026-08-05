@@ -4,12 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import AnimatedBorder from "./AnimatedBorder";
-import {
-  IoIosArrowDown,
-  IoIosArrowUp,
-  RiArrowRightSLine,
-  navItems,
-} from "@/data";
+import { navItems} from "@/constant";
+import {RiArrowRightSLine} from 'react-icons/ri';
+import { IoIosArrowDown, IoIosArrowUp } from 'react-icons/io';
 import { useScreenSize } from "@/hooks";
 
 function NavItem({ item, pathname, type = "main" }: ItemProps) {

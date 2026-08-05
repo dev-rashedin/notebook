@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import { ThemeSwitcher } from '../theme/theme-switcher';
 import NavLink from './Navlinks';
-import { IoCloseCircleOutline, RiMenu3Fill } from '@/data';
+import { IoCloseCircleOutline } from 'react-icons/io5';
+import {
+  RiMenu3Fill,
+} from 'react-icons/ri';
 
 export default function MobileMenu() {
   const [dropdownOpen, setDropdownOpen] = useState(false);

@@ -1,7 +1,8 @@
 'use client';
 import { JSX, useState } from 'react';
 import copy from 'copy-to-clipboard';
-import { CgNpm, SiBun, SiDeno, SiPnpm, SiYarn } from '@/data';
+import { CgNpm } from 'react-icons/cg';
+import { SiBun, SiDeno, SiPnpm, SiYarn } from 'react-icons/si';
 
 interface CopyableCodeBlockProps {
   codeHTML: string | Record<string, string>;

@@ -2,11 +2,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import Logo from './ui/ServestLogo';
+import Logo from './ui/Logo';
 import HeaderFrame from './ui/HeaderFrame';
 import { useSidebar } from './SidebarToggleContext';
 import AnimatedBorder from './ui/AnimatedBorder';
-import { RiArrowRightDoubleFill } from '@/data';
+import {RiArrowRightDoubleFill} from 'react-icons/ri';
 
 const formatLabel = (label: string) =>
   label
@@ -23,11 +23,11 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
 
   return (
     <aside
-      className={`h-screen pl-8 lg:pl-12 xl:pl-24 pt-6 lg:pt-0 fixed w-full lg:w-[25%] xl:w-[10%] overflow-y-auto ${sidebarOpen ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'}`}
+       className={`h-screen pl-8 lg:pl-12 xl:pl-24 pt-6 lg:pt-0 fixed w-full lg:w-[25%] xl:w-[20%] overflow-y-auto ${sidebarOpen ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'}`}
     >
      
       {/* logo */}
-      <section className="hidden lg:block sticky top-0 z-10 bg-sidebar">
+     <section className="hidden lg:block sticky top-0 z-10 bg-sidebar ">
         <HeaderFrame type="logo">
           <Logo />
         </HeaderFrame>
