@@ -14,10 +14,7 @@ const HowItWorks = dynamic(() => import('@/components/ui/Home/HowItWorks'), {
   ssr: false,
 });
 
-const WhyServest = dynamic(() => import('@/components/ui/Home/WhyServest'), {
-  loading: () => <LoadingSkeleton />,
-  ssr: false,
-});
+
 const ContributeSection = dynamic(() => import('@/components/ui/Home/ContributeSection'), {
   loading: () => <LoadingSkeleton />,
   ssr: false,
@@ -27,4 +24,4 @@ const FinalCTA = dynamic(() => import('@/components/ui/Home/FinalCTA'), {
   ssr: false,
 });
 
-export { Hero, DevFeedback, HowItWorks, WhyServest, ContributeSection, FinalCTA, Footer };
+export { Hero, DevFeedback, HowItWorks, ContributeSection, FinalCTA, Footer };

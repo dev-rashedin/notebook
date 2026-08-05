@@ -4,8 +4,7 @@ import {
   FinalCTA,
   Footer,
   Hero,
-  HowItWorks,
-  WhyServest,
+  HowItWorks
 } from '@/components/HomePageSections';
 
 export default function HomePage() {
@@ -13,7 +12,6 @@ export default function HomePage() {
     <>
       <section className="space-y-40">
         <Hero />
-        <WhyServest />
         <HowItWorks />
         <DevFeedback />
         <ContributeSection />

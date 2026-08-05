@@ -1,23 +1,28 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import AnimatedBorder from './AnimatedBorder';
-import { IoIosArrowDown, IoIosArrowUp, RiArrowRightSLine, navItems } from '@/data';
-import { useScreenSize } from '@/hooks';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import AnimatedBorder from "./AnimatedBorder";
+import {
+  IoIosArrowDown,
+  IoIosArrowUp,
+  RiArrowRightSLine,
+  navItems,
+} from "@/data";
+import { useScreenSize } from "@/hooks";
 
-function NavItem({ item, pathname, type = 'main' }: ItemProps) {
+function NavItem({ item, pathname, type = "main" }: ItemProps) {
   const [open, setOpen] = useState(false);
   const { isLargeScreen, isMobile } = useScreenSize();
 
   const isActive = pathname === item.to;
 
   const isNative =
-    item.label === 'Blog' ||
-    item.label === 'Guide' ||
-    item.label === 'Config' ||
-    item.label === 'Addons';
+    item.label === "Case Studies" ||
+    item.label === "Notes" ||
+    item.label === "Articles" ||
+    item.label === "Interviews";
 
   const handleMouseEnter = () => isLargeScreen && setOpen(true);
   const handleMouseLeave = () => {
@@ -37,34 +42,42 @@ function NavItem({ item, pathname, type = 'main' }: ItemProps) {
       {item.to ? (
         <Link
           href={item.to}
-          target={isNative ? '_self' : '_blank'}
+          target={isNative ? "_self" : "_blank"}
           className={`group relative flex gap-2 px-2 items-center rounded-full cursor-pointer tracking-wide  ${
-            isActive ? 'text-brand font-medium' : ''
-          } ${type === 'sub' ? 'ml-6 mt-1' : ''}`}
+            isActive ? "text-brand font-medium" : ""
+          } ${type === "sub" ? "ml-6 mt-1" : ""}`}
         >
           <span className="relative group flex items-center">
-            {type === 'sub' && <RiArrowRightSLine />}
+            {type === "sub" && <RiArrowRightSLine />}
             {item.label}
             <AnimatedBorder />
           </span>
         </Link>
       ) : item.subMenu ? (
         <>
-          <p className="px-2 pb-1 flex items-center gap-1 text-muted-foreground">{item.label}</p>
+          <p className="px-2 pb-1 flex items-center gap-1 text-muted-foreground">
+            {item.label}
+          </p>
           {item.subMenu.map((sub: NavItemType) => (
-            <NavItem key={sub.label} item={sub} pathname={pathname} type="sub" />
+            <NavItem
+              key={sub.label}
+              item={sub}
+              pathname={pathname}
+              type="sub"
+            />
           ))}
         </>
       ) : (
         <button className="flex items-center gap-2 ml-2 md:ml-0">
-          {item.label} {item.dropdown && (open ? <IoIosArrowUp /> : <IoIosArrowDown />)}
+          {item.label}{" "}
+          {item.dropdown && (open ? <IoIosArrowUp /> : <IoIosArrowDown />)}
         </button>
       )}
 
       {item.dropdown && open && (
         <ul
           className={`w-72 rounded-xl flex flex-col gap-4 z-50 px-4 py-8 ${
-            isMobile ? '' : 'absolute -left-24 lg:-left-16 top-full bg-navbar'
+            isMobile ? "" : "absolute -left-24 lg:-left-16 top-full bg-navbar"
           }`}
         >
           {item.dropdown.map((sub: NavItemType) => (
@@ -76,7 +89,11 @@ function NavItem({ item, pathname, type = 'main' }: ItemProps) {
   );
 }
 
-export default function NavLink({ dropdownOpen = false }: { dropdownOpen?: boolean }) {
+export default function NavLink({
+  dropdownOpen = false,
+}: {
+  dropdownOpen?: boolean;
+}) {
   const pathname = usePathname();
   const [hydrated, setHydrated] = useState(false);
   const { isMobile } = useScreenSize();
@@ -86,7 +103,10 @@ export default function NavLink({ dropdownOpen = false }: { dropdownOpen?: boole
   }, []);
 
   const renderedNavItems = useMemo(
-    () => navItems.map((item) => <NavItem key={item.label} item={item} pathname={pathname} />),
+    () =>
+      navItems.map((item) => (
+        <NavItem key={item.label} item={item} pathname={pathname} />
+      )),
     [pathname],
   );
 
@@ -94,7 +114,7 @@ export default function NavLink({ dropdownOpen = false }: { dropdownOpen?: boole
 
   return (
     <ul
-      className={`${isMobile ? (dropdownOpen ? 'flex' : 'hidden') : 'flex'} flex-col md:flex-row gap-8 xl:mr-36`}
+      className={`${isMobile ? (dropdownOpen ? "flex" : "hidden") : "flex"} flex-col md:flex-row gap-8 xl:mr-36`}
     >
       {renderedNavItems}
     </ul>
