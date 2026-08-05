@@ -2,8 +2,9 @@
 
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { FiMoon, IoSunnyOutline } from '@/data';
 import { Button } from '@/components/ui/CustomButton';
+import { FiMoon } from 'react-icons/fi';
+import { IoSunnyOutline } from 'react-icons/io5';
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();

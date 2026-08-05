@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ThemeSwitcher } from '../theme/theme-switcher';
-import Socials from './SocialLinks';
 import NavLink from './Navlinks';
 import { IoCloseCircleOutline, RiMenu3Fill } from '@/data';
 
@@ -88,10 +87,6 @@ export default function MobileMenu() {
         <div className="w-full mx-auto border rounded-lg flex-between py-2 px-8 justify-end">
           <span className="text-xs text-muted-foreground opacity-75">Theme</span>
           <ThemeSwitcher />
-        </div>
-
-        <div className="pt-4">
-          <Socials screenType="small" />
         </div>
       </div>
     </div>

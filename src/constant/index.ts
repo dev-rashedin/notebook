@@ -32,10 +32,6 @@ export const docsOrder: Record<string, string[]> = {
   caseStudies: [
     '_Introduction',
     'index',
-    'why-servest',
-    'our-journey',
-    '_Reference',
-    'cli-reference',
     '_Templates',
   ],
     notes: [
@@ -45,13 +41,6 @@ export const docsOrder: Record<string, string[]> = {
     'index',
     '_Addons',
     'f-fileName',
-    'eslint',
-    'prettier',
-    'eslint-prettier',
-    'mongoose',
-    'prisma',
-    'drizzle',
-    'lint-staged',
   ],
   interviews: [
     'index',

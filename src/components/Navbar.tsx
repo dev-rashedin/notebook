@@ -1,7 +1,7 @@
 import { ThemeSwitcher } from './theme/theme-switcher';
 import NavLink from './ui/Navlinks';
 import MobileMenu from './ui/MobileMenu';
-import Logo from './ui/ServestLogo';
+import Logo from './ui/Logo';
 import HeaderFrame from './ui/HeaderFrame';
 
 const Navbar = ({ type = 'home' }: { type: string }) => {
