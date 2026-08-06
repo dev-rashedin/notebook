@@ -1,12 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { createHighlighter } from 'shiki';
-import CopyableCodeBlock from './CopyCodeBlock';
+import { useEffect, useState } from "react";
+import { createHighlighter } from "shiki";
+import CopyableCodeBlock from "./CopyCodeBlock";
 
-export default function CodeBlock({ code, language = 'bash' }: CodeBlockProps) {
+export default function CodeBlock({ code, language = "bash" }: CodeBlockProps) {
   const [html, setHtml] = useState<string | null>(null);
-  const [variantHtml, setVariantHtml] = useState<Record<string, string> | null>(null);
+  const [variantHtml, setVariantHtml] = useState<Record<string, string> | null>(
+    null,
+  );
 
   let parsed: Record<string, string> | null = null;
   try {
@@ -15,28 +17,47 @@ export default function CodeBlock({ code, language = 'bash' }: CodeBlockProps) {
     parsed = null;
   }
 
-  const isVariants = !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+  const isVariants =
+    !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
 
   useEffect(() => {
     let cancelled = false;
 
     async function highlight() {
       const highlighter = await createHighlighter({
-        themes: ['andromeeda'],
-        langs: ['ts', 'js', 'bash', 'json', 'tsx', 'jsx', 'css', 'html', 'prisma', 'dotenv', 'mdx'],
+        themes: ["andromeeda"],
+        langs: [
+          "ts",
+          "js",
+          "bash",
+          "json",
+          "tsx",
+          "jsx",
+          "css",
+          "html",
+          "prisma",
+          "dotenv",
+          "mdx",
+        ],
       });
 
       if (isVariants && parsed) {
         const entries = await Promise.all(
           Object.entries(parsed).map(async ([key, value]) => [
             key,
-            highlighter.codeToHtml(value, { lang: language, theme: 'andromeeda' }),
+            highlighter.codeToHtml(value, {
+              lang: language,
+              theme: "andromeeda",
+            }),
           ]),
         );
 
         if (!cancelled) setVariantHtml(Object.fromEntries(entries));
       } else {
-        const htmlResult = highlighter.codeToHtml(code, { lang: language, theme: 'andromeeda' });
+        const htmlResult = highlighter.codeToHtml(code, {
+          lang: language,
+          theme: "andromeeda",
+        });
         if (!cancelled) setHtml(htmlResult);
       }
     }
@@ -50,7 +71,7 @@ export default function CodeBlock({ code, language = 'bash' }: CodeBlockProps) {
 
   if ((isVariants && !variantHtml) || (!isVariants && !html)) {
     return (
-      <div className="w-full rounded-lg bg-[#1e1e2e] text-[#a6accd] p-4 font-mono text-sm animate-pulse">
+      <div className="w-full rounded-lg bg-[#1e1e2e] text-[#a6accd] p-4  text-sm animate-pulse">
         Loading code snippet…
       </div>
     );

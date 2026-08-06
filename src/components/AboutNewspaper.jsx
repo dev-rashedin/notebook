@@ -93,10 +93,10 @@ function StatCell({ value, label, last }) {
         last ? '' : 'border-r border-border/30'
       }`}
     >
-      <span className="font-serif text-xl sm:text-2xl text-foreground leading-none">
+      <span className=" text-xl sm:text-2xl text-foreground leading-none">
         {value}
       </span>
-      <span className="font-mono text-[9px] sm:text-[10px] tracking-widest text-foreground/60 uppercase mt-1">
+      <span className=" text-[9px] sm:text-[10px] tracking-widest text-foreground/60 uppercase mt-1">
         {label}
       </span>
     </div>
@@ -106,10 +106,10 @@ function StatCell({ value, label, last }) {
 function SkillBlock({ title, items }) {
   return (
     <div className="mb-8">
-      <h4 className="font-mono text-xs uppercase tracking-[0.2em] text-red-800 font-bold mb-2 pb-1 border-b-2 border-red-800 inline-block">
+      <h4 className=" text-xs uppercase tracking-[0.2em] text-brand font-bold mb-2 pb-1 border-b-2 border-red-800 inline-block">
         {title}
       </h4>
-      <p className="font-serif text-[15px] leading-7 text-foreground/80 text-justify">
+      <p className=" text-[15px] leading-7 text-foreground/80 text-justify">
         {items.join(' · ')}
       </p>
     </div>
@@ -122,9 +122,9 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
       {/* import fonts — remove if already loaded globally in your app */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        .font-serif { font-family: 'Source Serif 4', Georgia, serif; }
+        . { font-family: 'Source Serif 4', Georgia, serif; }
         .font-display { font-family: 'Playfair Display', Georgia, serif; }
-        .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        . { font-family: 'JetBrains Mono', ui-monospace, monospace; }
         .drop-cap::first-letter {
           font-family: 'Playfair Display', Georgia, serif;
           float: left;
@@ -138,23 +138,23 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
 
       <div className="max-w-5xl mx-auto border-2 border-border px-5 sm:px-10 py-6 sm:py-8">
         {/* masthead top bar */}
-        <div className="flex-between font-mono text-[10px] sm:text-xs uppercase tracking-widest border-b border-border pb-2">
+        <div className="flex-between  text-[10px] sm:text-xs uppercase tracking-widest border-b border-border pb-2">
           <span>rashedin.dev</span>
           <span>Issue No. 001 — {todayStamp()}</span>
         </div>
 
         {/* masthead */}
         <div className="text-center py-5 sm:py-7">
-          <p className="font-mono text-[10px] sm:text-xs tracking-[0.3em] text-red-800 uppercase mb-2">
+          <p className=" text-[10px] sm:text-xs tracking-[0.3em] text-brand uppercase mb-2">
             GenAI Engineering Edition
           </p>
           <h1 className="font-display font-black text-4xl sm:text-6xl tracking-tight">
-            THE DAILY <span className="text-red-800">BUILD</span>
+            THE DAILY <span className="text-brand">BUILD</span>
           </h1>
         </div>
 
         {/* black subhead bar */}
-        <div className="bg- text-[#F3EFE4] font-mono text-[10px] sm:text-xs uppercase tracking-widest px-4 py-2 flex-between">
+        <div className="bg- text-[#F3EFE4]  text-[10px] sm:text-xs uppercase tracking-widest px-4 py-2 flex-between">
           <span>About Section</span>
           <span>Software Engineer Profile</span>
         </div>
@@ -179,14 +179,14 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
                 height={200}
                 className="rounded-full mx-auto"
               />
-              <p className="font-serif italic text-sm text-[#F3EFE4] mt-4">
+              <p className=" italic text-sm text-[#F3EFE4] mt-4">
                 Two-plus years turning prompts into production systems.
               </p>
             </div>
 
             {/* tech stack — bottom section under the title */}
             <div className="border border-border border-t-0 p-5">
-              <h3 className="font-mono text-xs uppercase tracking-widest border-b border-border pb-2 mb-3">
+              <h3 className=" text-xs uppercase tracking-widest border-b border-border pb-2 mb-3">
                 Section: Tech Stack
               </h3>
               <img
@@ -195,14 +195,14 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
                 className="w-full grayscale contrast-125 border border-border/20"
                 loading="lazy"
               />
-              <p className="font-mono text-[9px] uppercase tracking-widest text-foreground/50 mt-1 mb-4">
+              <p className=" text-[9px] uppercase tracking-widest text-foreground/50 mt-1 mb-4">
                 Wire photo — live contribution activity
               </p>
               <div className="flex flex-wrap gap-2">
                 {['Next.js', 'Tailwind CSS'].map((t) => (
                   <span
                     key={t}
-                    className="font-mono text-[10px] uppercase tracking-wider border border-border px-2 py-1"
+                    className=" text-[10px] uppercase tracking-wider border border-border px-2 py-1"
                   >
                     Built with {t}
                   </span>
@@ -218,13 +218,13 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
               <h3 className="font-display font-bold text-2xl sm:text-3xl">
                 Rashedin Islam
               </h3>
-              <p className="font-mono text-xs uppercase tracking-widest text-foreground/70 mt-1">
+              <p className=" text-xs uppercase tracking-widest text-foreground/70 mt-1">
                 AI-Focused Software Engineer · LangChain · LangGraph
               </p>
 
-              <ul className="font-serif text-sm mt-4 space-y-1.5">
+              <ul className=" text-sm mt-4 space-y-1.5">
                 <li className="flex items-center gap-2">
-                  <RiMvAiLine size={14} className="text-red-800" />
+                  <RiMvAiLine size={14} className="text-brand" />
                   <a
                     href="mailto:rashedinislam.06@gmail.com"
                     className="hover:underline"
@@ -233,7 +233,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <BiGlobe size={14} className="text-red-800" />
+                  <BiGlobe size={14} className="text-brand" />
                   <a
                     href="https://www.rashedin.dev"
                     className="hover:underline"
@@ -242,7 +242,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <FaLinkedin size={14} className="text-red-800" />
+                  <FaLinkedin size={14} className="text-brand" />
                   <a
                     href="http://linkedin.com/in/dev-rashedin"
                     className="hover:underline"
@@ -251,7 +251,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <FaGithub size={14} className="text-red-800" />
+                  <FaGithub size={14} className="text-brand" />
                   <a
                     href="http://github.com/dev-rashedin"
                     className="hover:underline"
@@ -271,7 +271,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
             </div>
 
             {/* lede / summary paragraph */}
-            <p className="drop-cap font-serif text-[15px] leading-7 text-foreground/85 text-justify mt-6">
+            <p className="drop-cap  text-[15px] leading-7 text-foreground/85 text-justify mt-6">
               AI-focused Software Engineer with 2+ years of experience
               designing and shipping production GenAI systems — LLM-powered
               agents and RAG pipelines. Skilled in LangChain, LangGraph, and
@@ -282,7 +282,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
 
             <a
               href="http://github.com/dev-rashedin"
-              className="font-mono text-xs uppercase tracking-widest inline-flex items-center gap-1 mt-4 self-start border-b border-border hover:border-red-800 hover:text-red-800 transition-colors"
+              className=" text-xs uppercase tracking-widest inline-flex items-center gap-1 mt-4 self-start border-b border-border hover:border-red-800 hover:text-brand transition-colors"
             >
               Continued on GitHub <BsArrowUpRightCircle size={13} />
             </a>
@@ -303,7 +303,7 @@ export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
         </div>
 
         {/* footer credit */}
-        <div className="text-center font-mono text-[9px] uppercase tracking-widest text-foreground/50 border-t border-border pt-3">
+        <div className="text-center  text-[9px] uppercase tracking-widest text-foreground/50 border-t border-border pt-3">
           Printed digitally for the web · rashedin.dev · Issue continues on
           GitHub
         </div>

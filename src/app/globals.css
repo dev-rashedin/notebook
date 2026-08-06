@@ -89,16 +89,16 @@
     --background: 0 0% 100%;
     --foreground: 0 0% 6%;
     --radial-bg: radial-gradient(circle at 50% 50%, hsl(0, 0%, 99%) 10%, hsl(0, 0%, 96%) 100%);
-    --navbar: 60, 100%, 99%;
+    --navbar: 60, 100%, 96%;
     --footer-bg: 255 255% 255%;
-    --brand: 34, 100%, 60%;
+    --brand: 47, 100%, 45%;
     --highlighted: 292, 91%, 50%;
     --link: 240, 100%, 45%;
     --link-hover: 240, 100%, 65%;
     --table-odd: 216, 12%, 98%;
     --table-even: 213, 12%, 90%;
     --docs: 60, 100%, 98%;
-    --sidebar: 0, 0%, 90%;
+    --sidebar: 60, 100%, 97%;
     --card: 60, 100%, 99%;
     --card-secondary: 0 0% 98%;
     --card-foreground: 0 0% 10%;
@@ -115,7 +115,7 @@
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0, 0%, 90%;
+    --border: 0, 0%, 50%;
     --border-docs: 0, 0%, 75%;
     --border-logo: 0, 0%, 80%;
     --input: 0 0% 89.8%;
@@ -145,21 +145,21 @@
 
   .dark {
     --background: 0 0% 5%;
-    --foreground: 0 0% 98%;
+    --foreground: 0 0% 95%;
     /* --radial-bg: radial-gradient(circle at 50% 50%, hsl(222, 87%, 6%) 10%, hsl(222, 38%, 9%) 100%); */
 
     --radial-bg: radial-gradient(circle at 50% 50%, hsl(221, 63%, 6%) 10%, hsl(221, 100%, 3%) 100%);
 
-    --navbar: 240, 100%, 0%;
+    --navbar: 0, 0%, 8%;
     --footer-bg: 0 0% 1%;
-    --brand: 48, 100%, 60%;
+    --brand: 47, 100%, 45%;
     --highlighted: 180, 60%, 50%;
     --table-odd: 220, 43%, 6%;
     --table-even: 220, 43%, 15%;
     --link: 200, 100%, 55%;
     --link-hover: 200, 100%, 65%;
-    --docs: 0, 0%, 8%;
-    --sidebar: 0, 0%, 6%;
+    --docs: 0, 0%, 6%;
+    --sidebar: 0, 0%, 8%;
     --card: 240, 100%, 4%;
     --card-secondary: 240, 100%, 0%;
     --card-foreground: 0 0% 95%;
@@ -176,7 +176,7 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 15%;
+    --border: 0 0% 30%;
     --border-docs: 0 0% 20%;
     --border-logo: 0 0% 35%;
     --input: 0 0% 14.9%;
@@ -251,7 +251,7 @@
     }
 
     code {
-      @apply font-mono text-sm;
+      @apply  text-sm;
     }
 
     /* blockquote {
