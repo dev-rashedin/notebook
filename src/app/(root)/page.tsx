@@ -1,3 +1,4 @@
+import { todayStamp } from "@/lib";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { HiOutlineMail } from "react-icons/hi";
 import { HiOutlineGlobeAlt } from "react-icons/hi";
@@ -44,13 +45,6 @@ const ISSUE_INDEX = [
   },
 ];
 
-    function todayStamp() {
-    return new Date().toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-  }
 
 
 

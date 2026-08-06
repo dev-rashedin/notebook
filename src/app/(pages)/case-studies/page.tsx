@@ -1,10 +1,5 @@
-function todayStamp() {
-  return new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
+import { todayStamp } from "@/lib";
+
 
 export default function CaseStudiesPage() {
   return (
