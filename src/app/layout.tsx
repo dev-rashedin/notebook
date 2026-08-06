@@ -1,26 +1,34 @@
-import type { Metadata } from 'next';
-import React, { JSX } from 'react';
-import { Inter, Montserrat } from 'next/font/google';
-import './globals.css';
-import { Analytics } from '@vercel/analytics/next';
-import { SpeedInsights } from '@vercel/speed-insights/next';
-import { ThemeProvider } from '@/components/theme/theme-provider';
+import type { Metadata } from "next";
+import React, { JSX } from "react";
+import { Inter, Montserrat } from "next/font/google";
+import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
-const montserrat = Montserrat({ subsets: ['latin'], weight: ['400', '700'], display: 'swap' });
-const inter = Inter({ subsets: ['latin'], weight: ['400', '700'], display: 'swap' });
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
     default: "Notebook | Personal Dev Journal",
-    template: '%s | Notebook',
+    template: "%s | Notebook",
   },
 
   description:
-    'A personal development journal for tracking my learning and growth as a developer.',
+    "A personal development journal for tracking my learning and growth as a developer.",
 
-  metadataBase: new URL('https://notebook.rashedin.dev'),
+  metadataBase: new URL("https://notebook.rashedin.dev"),
 
-  authors: [{ name: 'Rashedin Islam' }],
+  authors: [{ name: "Rashedin Islam" }],
 
   robots: {
     index: true,
@@ -32,42 +40,24 @@ export const metadata: Metadata = {
   },
 
   alternates: {
-    canonical: 'https://notebook.rashedin.dev',
+    canonical: "https://notebook.rashedin.dev",
   },
 
   openGraph: {
-    title: 'Notebook | Personal Dev Journal',
-
+    title: "Notebook | Personal Dev Journal",
     description:
-      'A personal development journal for tracking my learning and growth as a developer.',
-
-    url: 'https://notebook.rashedin.dev',
-
-    siteName: 'Notebook',
-
-    locale: 'en_US',
-
-    images: [
-      {
-        url: '/images/servest-og.png',
-        width: 1200,
-        height: 630,
-        alt: 'Notebook | Personal Dev Journal',
-      },
-    ],
-
-    type: 'website',
+      "A personal development journal for tracking my learning and growth as a developer.",
+    url: "https://notebook.rashedin.dev",
+    siteName: "Notebook",
+    locale: "en_US",
+    type: "website",
   },
 
   twitter: {
-    card: 'summary_large_image',
-
-    title: 'Notebook | Personal Dev Journal',
-
+    card: "summary",
+    title: "Notebook | Personal Dev Journal",
     description:
-      'A personal development journal for tracking my learning and growth as a developer.',
-
-    images: ['/images/servest-og.png'],
+      "A personal development journal for tracking my learning and growth as a developer.",
   },
 };
 
@@ -87,52 +77,30 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@graph': [
+              "@context": "https://schema.org",
+              "@graph": [
                 {
-                  '@type': 'SoftwareApplication',
-                  '@id': 'https://notebook.rashedin.dev/#app',
-
-                  name: 'Notebook',
-
-                  url: 'https://notebook.rashedin.dev',
-
+                  "@type": "Blog",
+                  "@id": "https://notebook.rashedin.dev/#blog",
+                  name: "Notebook",
+                  url: "https://notebook.rashedin.dev",
                   description:
-                    'A personal development journal for tracking my learning and growth as a developer.',
-
-                  applicationCategory: 'DeveloperApplication',
-
-                  operatingSystem: 'Cross-platform',
-
-                  offers: {
-                    '@type': 'Offer',
-                    price: '0',
-                    priceCurrency: 'USD',
-                  },
-
+                    "A personal development journal for tracking my learning and growth as a developer.",
                   author: {
-                    '@id': 'https://notebook.rashedin.dev/#person',
+                    "@id": "https://notebook.rashedin.dev/#person",
                   },
                 },
-
                 {
-                  '@type': 'Person',
-
-                  '@id': 'https://notebook.rashedin.dev/#person',
-
-                  name: 'Rashedin Islam',
-
-                  url: 'https://rashedin.dev',
+                  "@type": "Person",
+                  "@id": "https://notebook.rashedin.dev/#person",
+                  name: "Rashedin Islam",
+                  url: "https://rashedin.dev",
                 },
-
                 {
-                  '@type': 'WebSite',
-
-                  '@id': 'https://notebook.rashedin.dev/#website',
-
-                  url: 'https://notebook.rashedin.dev',
-
-                  name: 'Notebook',
+                  "@type": "WebSite",
+                  "@id": "https://notebook.rashedin.dev/#website",
+                  url: "https://notebook.rashedin.dev",
+                  name: "Notebook",
                 },
               ],
             }),
@@ -144,7 +112,12 @@ export default function RootLayout({
         />
       </head>
       <body className="relative overflow-x-hidden" suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
           {children}
           <Analytics />
           <SpeedInsights />

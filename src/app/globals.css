@@ -150,7 +150,7 @@
 
     --radial-bg: radial-gradient(circle at 50% 50%, hsl(221, 63%, 6%) 10%, hsl(221, 100%, 3%) 100%);
 
-    --navbar: 240, 100%, 5%;
+    --navbar: 240, 100%, 0%;
     --footer-bg: 0 0% 1%;
     --brand: 48, 100%, 60%;
     --highlighted: 180, 60%, 50%;

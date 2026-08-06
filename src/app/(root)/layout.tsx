@@ -1,5 +1,4 @@
 import React from 'react';
-import { Spotlight } from '@/components/ui/SpotlightNew';
 import Navbar from '@/components/Navbar';
 
 export default function HomeLayout({
@@ -8,8 +7,7 @@ export default function HomeLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <main className="relative">
-      <Spotlight className="absolute -top-40 left-0 md:-top-20 md:left-60" fill="white" />
+    <main className="relative bg-docs">
       <Navbar type="home" />
       {children}
     </main>
