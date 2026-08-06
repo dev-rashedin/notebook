@@ -5,11 +5,14 @@ import Logo from './ui/Logo';
 import HeaderFrame from './ui/HeaderFrame';
 
 const Navbar = ({ type = 'home' }: { type: string }) => {
+
   return (
     <HeaderFrame type={type}>
       <nav className="boundary flex-between">
         <Logo type={type} />
-        <section className="flex-center ">
+        <section className='hidden md:block p-3'>
+      </section>
+        <section className="flex-center">
           <NavLink />
           <MobileMenu />
           <div className={`hidden md:block ${type === 'sidebar' ? 'xl:mr-20' : ''}`}>

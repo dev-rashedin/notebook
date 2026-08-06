@@ -42,31 +42,27 @@ const ISSUE_INDEX = [
     href: "/interviews",
     desc: "Conversations with people building things.",
   },
-  {
-    label: "Resources",
-    href: "/resources",
-    desc: "Tools, links, and material worth keeping.",
-  },
 ];
 
-function todayStamp() {
-  return new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-}
+    function todayStamp() {
+    return new Date().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+
 
 export default function HomePage() {
   return (
     <main className="min-h-[92vh] flex flex-col">
       <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
         {/* top bar */}
-        {/* <div className="flex items-center justify-between  text-[10px] sm:text-xs uppercase tracking-widest border-b border-border pb-2">
-          <span>notebook.rashedin.dev</span>
+        <div className="flex items-center justify-between gap-8 lg:gap-16 xl:gap-24 uppercase tracking-widest text-foreground/80 text-[9px]">
           <span>Vol. I — No. 001</span>
           <span>{todayStamp()}</span>
-        </div> */}
+        </div> 
 
         {/* masthead */}
         <div className="text-center py-8 sm:py-12 border-b-4 border-border">
@@ -76,6 +72,7 @@ export default function HomePage() {
           <h1 className="font-display font-black text-5xl sm:text-7xl tracking-tight leading-none">
             THE NOTEBOOK
           </h1>
+         
           <div className="flex items-center justify-center gap-3 mt-5  text-[10px] sm:text-xs uppercase tracking-widest text-foreground/70">
             <span>Est. 2026</span>
             <span className="text-border">|</span>
@@ -149,7 +146,7 @@ export default function HomePage() {
       </div>
 
       {/* footer */}
-      <footer className="text-center max-w-fit mx-auto px-20 text-[10px] uppercase tracking-widest text-foreground/80 border-t border-border py-4 mt-auto">
+      <footer className="text-center max-w-fit mx-auto px-20 text-[9px] uppercase tracking-widest text-foreground/80 border-t border-border py-4 mt-auto">
         © {new Date().getFullYear()} Rashedin Islam. All rights reserved.
       </footer>
     </main>

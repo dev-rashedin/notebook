@@ -31,7 +31,7 @@ export function ThemeSwitcher() {
       variant="theme"
       size="icon"
       onClick={toggleTheme}
-      className="rounded-full bg-transparent"
+      className="rounded-full bg-transparent mt-1"
       aria-label="Toggle theme"
     >
       {theme === 'dark' ? <FiMoon /> : <IoSunnyOutline />}
