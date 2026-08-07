@@ -3,6 +3,7 @@ import { todayStamp } from "@/lib";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { HiOutlineMail } from "react-icons/hi";
 import { HiOutlineGlobeAlt } from "react-icons/hi";
+import MotionWrapper from '../../components/MotionWrapper';
 
 const SOCIALS = [
   { label: "GitHub", href: "https://github.com/dev-rashedin", icon: FaGithub },
@@ -51,13 +52,10 @@ const ISSUE_INDEX = [
 
 export default function HomePage() {
   return (
-    <main className="min-h-[92vh] flex flex-col">
+   <MotionWrapper>
+     <main className="min-h-[92vh] flex flex-col">
       <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
         {/* top bar */}
-        <div className="flex items-center justify-between gap-8 lg:gap-16 xl:gap-24 uppercase tracking-widest text-foreground/80 text-[9px]">
-          <span>Vol. I — No. 001</span>
-          <span>{todayStamp()}</span>
-        </div> 
         <SectionIntro title="Vol. I — No. 001" />
 
         {/* masthead */}
@@ -146,5 +144,6 @@ export default function HomePage() {
         © {new Date().getFullYear()} Rashedin Islam. All rights reserved.
       </footer>
     </main>
+   </MotionWrapper>
   );
 }

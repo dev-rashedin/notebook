@@ -7,10 +7,6 @@ export default function CaseStudiesPage() {
     <main className="min-h-[86vh] flex flex-col">
       <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
         {/* top bar */}
-        <div className="flex items-center justify-between gap-8 lg:gap-16 xl:gap-24 uppercase tracking-widest text-foreground/80 text-[9px]">
-          <span>Section: Case Studies</span>
-          <span>{todayStamp()}</span>
-        </div>
         <SectionIntro title="Section: Case Studies" />
 
         {/* masthead */}

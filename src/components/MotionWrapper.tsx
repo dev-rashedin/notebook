@@ -10,8 +10,8 @@ export default function MotionWrapper({ children }: { children: ReactNode }) {
 
   return (
     <main>
-      {pathname.includes('config') || pathname.includes('blog') ? null : <Navbar type="sidebar" />}
-      <SecondaryNav pathname={pathname} />
+      {pathname === '/' ? null : <Navbar type="sidebar" />}
+     {pathname === '/' ? null :  <SecondaryNav pathname={pathname} />}
       <motion.div
         key={pathname}
         initial={{ opacity: 0 }}
