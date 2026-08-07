@@ -1,10 +1,18 @@
-import { todayStamp } from '@/lib'
-import React from 'react'
 
-const SectionIntro = () => {
+
+
+export const todayStamp = () => {
+  return new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+const SectionIntro = ({title}: {title: string}) => {
   return (
     <div className="flex items-center justify-between gap-8 lg:gap-16 xl:gap-24 uppercase tracking-widest text-foreground/80 text-[9px]">
-          <span>Vol. I — No. 001</span>
+          <span>{title}</span>
           <span>{todayStamp()}</span>
         </div> 
   )

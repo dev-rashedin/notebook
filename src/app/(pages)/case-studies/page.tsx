@@ -1,3 +1,4 @@
+import SectionIntro from "@/components/ui/SectionIntro";
 import { todayStamp } from "@/lib";
 
 
@@ -10,6 +11,7 @@ export default function CaseStudiesPage() {
           <span>Section: Case Studies</span>
           <span>{todayStamp()}</span>
         </div>
+        <SectionIntro title="Section: Case Studies" />
 
         {/* masthead */}
         <div className="text-center py-8 sm:py-12 border-b-4 border-border">

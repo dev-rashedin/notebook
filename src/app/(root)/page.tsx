@@ -1,3 +1,4 @@
+import SectionIntro from "@/components/ui/SectionIntro";
 import { todayStamp } from "@/lib";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { HiOutlineMail } from "react-icons/hi";
@@ -57,6 +58,7 @@ export default function HomePage() {
           <span>Vol. I — No. 001</span>
           <span>{todayStamp()}</span>
         </div> 
+        <SectionIntro title="Vol. I — No. 001" />
 
         {/* masthead */}
         <div className="text-center py-8 sm:py-12 border-b-4 border-border">
