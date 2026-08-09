@@ -1,27 +1,6 @@
-import{ SectionIntro} from "@/components/ui/home-page-ui";
-import { FaGithub, FaLinkedin } from "react-icons/fa";
-import { HiOutlineMail } from "react-icons/hi";
-import { HiOutlineGlobeAlt } from "react-icons/hi";
-import MotionWrapper from "../../components/MotionWrapper";
+import { SectionIntro, ContactEditor } from "@/components/ui/home-page-ui";
 
-const SOCIALS = [
-  { label: "GitHub", href: "https://github.com/dev-rashedin", icon: FaGithub },
-  {
-    label: "LinkedIn",
-    href: "https://linkedin.com/in/dev-rashedin",
-    icon: FaLinkedin,
-  },
-  {
-    label: "Email",
-    href: "mailto:rashedinislam.06@gmail.com",
-    icon: HiOutlineMail,
-  },
-  {
-    label: "Portfolio",
-    href: "https://www.rashedin.dev",
-    icon: HiOutlineGlobeAlt,
-  },
-];
+import MotionWrapper from "../../components/MotionWrapper";
 
 const ISSUE_INDEX = [
   {
@@ -112,27 +91,7 @@ export default function HomePage() {
           </div>
 
           {/* contact the editor — classified box */}
-          <div className="border border-border mt-10 sm:mt-14">
-            <div className="bg-foreground text-background  text-[10px] sm:text-xs uppercase tracking-widest px-4 py-2">
-              Contact the Editor
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-border">
-              {SOCIALS.map(({ label, href, icon: Icon }) => (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex flex-col items-center gap-2 py-5 hover:bg-foreground/5 transition-colors"
-                >
-                  <Icon size={18} className="text-brand" />
-                  <span className=" text-[10px] uppercase tracking-widest">
-                    {label}
-                  </span>
-                </a>
-              ))}
-            </div>
-          </div>
+          <ContactEditor />
         </div>
 
         {/* footer */}

@@ -1,4 +1,6 @@
-
+import { FaGithub, FaLinkedin } from "react-icons/fa";
+import { HiOutlineMail } from "react-icons/hi";
+import { HiOutlineGlobeAlt } from "react-icons/hi";
 
 export const navItems = [
   { label: 'Case Studies', to: '/case-studies' },
@@ -61,6 +63,26 @@ export const nestedDocsOrder: Record<string, { label: string; items: string[] }[
     },
   ],
 };
+
+
+export const SOCIALS = [
+  { label: "GitHub", href: "https://github.com/dev-rashedin", icon: FaGithub },
+  {
+    label: "LinkedIn",
+    href: "https://linkedin.com/in/dev-rashedin",
+    icon: FaLinkedin,
+  },
+  {
+    label: "Email",
+    href: "mailto:rashedinislam.06@gmail.com",
+    icon: HiOutlineMail,
+  },
+  {
+    label: "Portfolio",
+    href: "https://www.rashedin.dev",
+    icon: HiOutlineGlobeAlt,
+  },
+];
 
 
 
