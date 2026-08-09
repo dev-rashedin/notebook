@@ -1,5 +1,4 @@
-import SectionIntro from "@/components/ui/home-page-ui";
-import { todayStamp } from "@/lib";
+import{ SectionIntro} from "@/components/ui/home-page-ui";
 import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { HiOutlineMail } from "react-icons/hi";
 import { HiOutlineGlobeAlt } from "react-icons/hi";

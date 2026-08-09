@@ -9,7 +9,7 @@ export const todayStamp = () => {
   });
 }
 
-const SectionIntro = ({title}: {title: string}) => {
+export const SectionIntro = ({title}: {title: string}) => {
   return (
     <div className="flex items-center justify-between gap-8 lg:gap-16 xl:gap-24 uppercase tracking-widest text-foreground/80 text-[9px]">
           <span>{title}</span>
@@ -18,4 +18,3 @@ const SectionIntro = ({title}: {title: string}) => {
   )
 }
 
-export default SectionIntro

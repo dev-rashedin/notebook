@@ -1,5 +1,4 @@
-import SectionIntro from "@/components/ui/home-page-ui";
-import { todayStamp } from "@/lib";
+import {SectionIntro} from "@/components/ui/home-page-ui";
 
 export default function CaseStudiesPage() {
   return (
