@@ -1,11 +1,10 @@
-import SectionIntro from "@/components/ui/SectionIntro";
+import SectionIntro from "@/components/ui/home-page-ui";
 import { todayStamp } from "@/lib";
-
 
 export default function CaseStudiesPage() {
   return (
     <main className="flex flex-col">
-      <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
+      <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16  flex-1 flex flex-col">
         {/* top bar */}
         <SectionIntro title="Section: Case Studies" />
 
@@ -31,9 +30,9 @@ export default function CaseStudiesPage() {
           <div className="md:col-span-2 md:border-r md:border-border md:pr-8">
             <p className="text-base sm:text-lg leading-8 text-foreground/85 text-justify [&::first-letter]:font-display [&::first-letter]:font-black [&::first-letter]:text-6xl [&::first-letter]:float-left [&::first-letter]:leading-[0.8] [&::first-letter]:pr-2 [&::first-letter]:pt-1">
               Every project leaves a trail — decisions made, problems that
-              didn't go as planned, fixes that worked and ones that didn't.
-              This section is where that trail gets written down properly,
-              from the first line of code to whatever shipped at the end.
+              didn't go as planned, fixes that worked and ones that didn't. This
+              section is where that trail gets written down properly, from the
+              first line of code to whatever shipped at the end.
             </p>
 
             <p className="text-sm sm:text-base leading-7 text-foreground/70 text-justify mt-5">

@@ -21,7 +21,7 @@ export default function MotionWrapper({ children }: { children: ReactNode }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.6, ease: "easeInOut" }}
-        className="flex-1 overflow-y-auto min-h-[calc(100vh-80px)] flex-center border"
+        className="flex-1 overflow-y-auto min-h-[calc(100vh-80px)] flex-center"
       >
         {children}
       </motion.div>
