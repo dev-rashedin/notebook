@@ -53,7 +53,7 @@ const ISSUE_INDEX = [
 export default function HomePage() {
   return (
    <MotionWrapper>
-     <main className="min-h-[92vh] flex flex-col">
+     <main className="flex flex-col">
       <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
         {/* top bar */}
         <SectionIntro title="Vol. I — No. 001" />
