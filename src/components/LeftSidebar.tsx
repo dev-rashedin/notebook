@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import Logo from "./ui/Logo";
-import HeaderFrame from "./ui/HeaderFrame";
+import Logo from "./ui/logo";
+import HeaderFrame from "./ui/header-frame";
 import { useSidebar } from "./SidebarToggleContext";
 import AnimatedBorder from "./ui/AnimatedBorder";
 import { RiArrowRightDoubleFill } from "react-icons/ri";

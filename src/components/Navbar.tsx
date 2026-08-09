@@ -1,15 +1,14 @@
 import { ThemeSwitcher } from './theme/theme-switcher';
 import NavLink from './ui/Navlinks';
 import MobileMenu from './ui/MobileMenu';
-import Logo from './ui/Logo';
+import Logo from './ui/logo';
+import HeaderFrame from "./ui/header-frame";
 
 const Navbar = ({ type = 'home' }: { type: string }) => {
 
   return (
-      <header
-      className={`h-20 pt-2 flex border-b  items-center lg:sticky lg:top-0 z-50  ${type === "home" ? "bg-navbar border-c-docs sticky top-0" : type === "logo" ? "mr-12 bg-sidebar border-c-logo" : " justify-end bg-docs border-c-docs"}`}
-    >
-      <nav className="boundary flex-between">
+      <HeaderFrame>
+        <nav className="boundary flex-between">
         <Logo type={type} />
         <section className='hidden md:block p-3'>
       </section>
@@ -21,7 +20,7 @@ const Navbar = ({ type = 'home' }: { type: string }) => {
           </div>
         </section>
       </nav>
-      </header>
+      </HeaderFrame>
   );
 };
 
