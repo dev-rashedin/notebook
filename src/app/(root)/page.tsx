@@ -1,5 +1,4 @@
-import { SectionIntro, ContactEditor } from "@/components/ui/home-page-ui";
-
+import { SectionHome } from "@/components/ui/home-page-ui";
 import MotionWrapper from "../../components/MotionWrapper";
 
 const ISSUE_INDEX = [
@@ -28,77 +27,21 @@ const ISSUE_INDEX = [
 export default function HomePage() {
   return (
     <MotionWrapper>
-      <main>
-        <div className="max-w-5xl w-full mx-auto px-5 sm:px-10 py-10 sm:py-16 flex-1 flex flex-col">
-          {/* top bar */}
-          <SectionIntro title="Vol. I — No. 001" />
-
-          {/* masthead */}
-          <div className="text-center py-8 sm:py-12 border-b-4 border-border">
-            <p className=" text-[10px] sm:text-xs tracking-[0.3em] text-brand uppercase mb-3">
-              Field Notes &amp; Case Studies
-            </p>
-            <h1 className="font-display font-black text-5xl sm:text-7xl tracking-tight leading-none">
-              THE NOTEBOOK
-            </h1>
-
-            <div className="flex items-center justify-center gap-3 mt-5  text-[10px] sm:text-xs uppercase tracking-widest text-foreground/70">
-              <span>Est. 2026</span>
-              <span className="text-border">|</span>
-              <span>Reporting by Rashedin Islam</span>
-              <span className="text-border">|</span>
-              <span>Single Correspondent Edition</span>
-            </div>
-          </div>
-
-          {/* two-column front page */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10 mt-10">
-            {/* lede — takes 2 of 3 columns */}
-            <div className="md:col-span-2 md:border-r md:border-border md:pr-8">
-              <p className=" text-base sm:text-lg leading-8 text-foreground/85 text-justify [&::first-letter]:font-display [&::first-letter]:font-black [&::first-letter]:text-6xl [&::first-letter]:float-left [&::first-letter]:leading-[0.8] [&::first-letter]:pr-2 [&::first-letter]:pt-1">
-                This is where case studies, interviews, notes, and articles get
-                filed as they happen — a working notebook rather than a polished
-                portfolio. Expect rough edges, real experiments, and the
-                occasional dead end.
-              </p>
-
-              <p className="text-sm sm:text-base leading-7 text-foreground/70 text-justify mt-5">
-                No editorial calendar, no publishing schedule — just a record
-                kept as the work happens.
-              </p>
-            </div>
-
-            {/* in this issue — sidebar column */}
-            <div>
-              <h2 className=" text-[10px] uppercase tracking-widest border-b-2 border-border pb-2 mb-3">
-                In This Issue
-              </h2>
-              <ul className="space-y-4">
-                {ISSUE_INDEX.map(({ label, href, desc }) => (
-                  <li key={label}>
-                    <a href={href} className="group block">
-                      <span className="font-semibold text-sm group-hover:text-brand transition-colors">
-                        {label}
-                      </span>
-                      <p className=" text-xs text-foreground/60 leading-5 mt-0.5">
-                        {desc}
-                      </p>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* contact the editor — classified box */}
-          <ContactEditor />
-        </div>
-
-        {/* footer */}
-        <footer className="text-center max-w-fit mx-auto px-20 text-[9px] uppercase tracking-widest text-foreground/80 border-t border-border py-4 mt-auto">
-          © {new Date().getFullYear()} Rashedin Islam. All rights reserved.
-        </footer>
-      </main>
+      <SectionHome
+        type="home"
+        introTitle="Vol. I — No. 001"
+        eyebrow="Field Notes & Case Studies"
+        title="THE NOTEBOOK"
+        metadata={[
+          "Est. 2026",
+          "Reporting by Rashedin Islam",
+          "Single Correspondent Edition",
+        ]}
+        lead="This is where case studies, interviews, notes, and articles get filed as they happen — a working notebook rather than a polished portfolio. Expect rough edges, real experiments, and the occasional dead end."
+        description="No editorial calendar, no publishing schedule — just a record kept as the work happens."
+        sidebarTitle="In This Issue"
+        sidebarItems={ISSUE_INDEX}
+      />
     </MotionWrapper>
   );
 }

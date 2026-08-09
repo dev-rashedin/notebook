@@ -7,10 +7,11 @@ import SecondaryNav from "./ui/SecondaryNav";
 
 export default function MotionWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const homeScreen = pathname === "/"
 
   return (
     <main>
-      {pathname === "/" ? null : (
+      {homeScreen ? null : (
         <div>
           <Navbar type="sidebar" /> <SecondaryNav pathname={pathname} />
         </div>
@@ -21,7 +22,7 @@ export default function MotionWrapper({ children }: { children: ReactNode }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.6, ease: "easeInOut" }}
-        className="flex-1 overflow-y-auto min-h-[calc(100vh-80px)] flex-center"
+        className={`flex-1 overflow-y-auto min-h-[calc(100vh-80px)] flex items-center ${homeScreen ? "justify-center" : "justify-start xl:pl-24"} `}
       >
         {children}
       </motion.div>
