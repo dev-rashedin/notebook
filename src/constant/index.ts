@@ -34,7 +34,7 @@ export const docsOrder: Record<string, string[]> = {
   caseStudies: [
     '_Introduction',
     'index',
-    '_Templates',
+    'challenge-system',
   ],
     notes: [
     'index',
@@ -56,6 +56,10 @@ export const nestedDocsOrder: Record<string, { label: string; items: string[] }[
       items: ['overview', 'challenge-system',],
     },
     {
+      label: 'servest',
+      items: ['overview'],
+    },
+     {
       label: 'tech-insight',
       items: ['overview'],
     },
