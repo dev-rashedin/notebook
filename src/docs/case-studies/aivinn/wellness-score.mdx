@@ -101,3 +101,111 @@ The five components' individual min/max values sum to exactly 60 and exactly 100
 
 **Why this matters:** the `clamp(60, 100)` never actually clips a real computed value — it's a defensive floor/ceiling that happens to be mathematically redundant given the component ranges. Worth knowing so nobody mistakes it for an active constraint shaping score behavior; it isn't one.
 
+---
+
+## Score Composition
+
+```
+Final Score = Habit + Budget + Income Stability + Goal + Challenge
+```
+
+Default values used when no `wellness_score` row exists yet (new wallet):
+
+```typescript
+let habitScore = existingWellness?.habit_score ? toNumber(existingWellness.habit_score) : 20;
+let incomeStabilityScore = existingWellness?.income_stability_score
+  ? toNumber(existingWellness.income_stability_score) : 20;
+let budgetScore = existingWellness?.budget_score ? toNumber(existingWellness.budget_score) : 20;
+let goalScore = existingWellness?.goal_score ? toNumber(existingWellness.goal_score) : 10;
+let challengeScore = existingWellness?.challenge_score ? toNumber(existingWellness.challenge_score) : 10;
+```
+
+This produces a starting score of **80** for a brand-new wallet with zero activity — landing directly in the "On Track" band before the user has done anything. This is a direct downstream consequence of Decision 4 (no-data-as-best-case), applied uniformly across all five defaults.
+
+---
+
+## Trigger-Based Recalculation
+
+```typescript
+if (trigger === 'TRANSACTION') {
+  [habitScore, incomeStabilityScore, budgetScore, goalScore] = await Promise.all([
+    computeHabitScore(walletId),
+    computeIncomeStabilityScore(walletId, wallet.payday),
+    computeBudgetScore(walletId, wallet.payday),
+    computeGoalScore(walletId, wallet.payday),
+  ]);
+}
+
+if (trigger === 'GOAL') {
+  goalScore = await computeGoalScore(walletId, wallet.payday);
+}
+
+if (trigger === 'CHALLENGE') {
+  challengeScore = await computeChallengeScore(walletId);
+}
+```
+
+The four `TRANSACTION`-triggered computations run in parallel via `Promise.all`, since they're independent queries against the same wallet — no reason to serialize them.
+
+---
+
+## Component Deep Dive
+
+### Habit Score (20–30)
+
+```typescript
+export const computeHabitScore = async (walletId: string): Promise<number> => {
+  const tenDaysAgo = dayjs.utc().subtract(10, 'day').startOf('day').toDate();
+
+  const recentTransactions = await prisma.transactions.findMany({
+    where: { wallet_id: walletId, date: { gte: tenDaysAgo } },
+    select: { date: true },
+  });
+
+  const activeDays = new Set(
+    recentTransactions.map(tx => dayjs.utc(tx.date).format('YYYY-MM-DD')),
+  ).size;
+
+  return Math.min(20 + activeDays, 30);
+};
+```
+
+Counts **distinct active days** in a rolling 10-day window, not transaction volume. A user logging one transaction a day and one logging ten transactions a day score identically — the metric rewards consistency of engagement, not intensity.
+
+### Budget Score (10–20)
+
+```typescript
+export const computeBudgetScore = async (walletId: string, payday: number): Promise<number> => {
+  const cycle = computeCycle(payday);
+  const activeBudget = await prisma.budgets.findFirst({
+    where: { wallet_id: walletId, start_date: cycle.start_date, end_date: cycle.end_date },
+    select: { amount: true },
+  });
+
+  if (!activeBudget) return 20;
+
+  const cycleTransactions = await prisma.transactions.findMany({
+    where: { wallet_id: walletId, date: { gte: cycle.start_date, lte: cycle.end_date } },
+    select: { amount: true, type: true },
+  });
+
+  const totalExpenses = Math.abs(
+    cycleTransactions.filter(t => t.type === 'EXPENSE')
+      .reduce((sum, t) => sum + toNumber(t.amount), 0),
+  );
+
+  const budgetAmount = toNumber(activeBudget.amount);
+  if (budgetAmount <= 0 || totalExpenses === 0) return 20;
+
+  const ratio = totalExpenses / budgetAmount;
+  if (ratio <= 1.0) return 20;
+  if (ratio <= 1.1) return 18;
+  if (ratio <= 1.25) return 16;
+  if (ratio <= 1.5) return 14;
+  if (ratio <= 1.75) return 12;
+  return 10;
+};
+```
+
+Bound to the user's current pay cycle (`computeCycle(payday)`), not a calendar month — so score movement is anchored to when the user actually gets paid, not an arbitrary date boundary.
+

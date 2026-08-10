@@ -5,7 +5,7 @@ import MotionWrapper from '@/components/MotionWrapper';
 import DrawerContainer from '@/components/DrawerContainer';
 import { getNestedLinks } from '@/lib/getLinks';
 
-export default function PagesLayout({ children, slug }: { children: ReactNode, slug: string }) {
+export default function LocalPagesLayout({ children, slug }: { children: ReactNode, slug: string }) {
   const links = getContentLinks(slug);
   
   
