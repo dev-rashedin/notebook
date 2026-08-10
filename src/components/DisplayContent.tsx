@@ -17,8 +17,8 @@ const DisplayContent = async ({ endpoint, slug }: Props) => {
   const isIndex = slug === 'index';
 
   return (
-    <>
-      <article className="prose prose-lg min-h-[30vh]">{content}</article>
+    <div className="h-full">
+      <article className="prose prose-lg min-h-fit">{content}</article>
 
       <DisplayHeadings clientHeadings={headings} />
       <RightSidebarPortal clientHeadings={headings} />
@@ -27,22 +27,10 @@ const DisplayContent = async ({ endpoint, slug }: Props) => {
 
       <section className="max-w-3xl pt-40 pb-60">
 
-
-        <div className={`${isIndex ? 'mt-28' : ''}`}>
-          <Link
-            href={`https://github.com/dev-rashedin/servest/edit/main/docs/${endpoint}/${currentSlug}.mdx`}
-            target="_blank"
-            className="flex items-center gap-4 text-brand"
-          >
-            <FiEdit />
-            Suggest changes to this page
-          </Link>
-        </div>
-
         <Divider />
 
         {/* next and previous button */}
-        <div className="flex justify-between min-h-16">
+        <div className="flex justify-between">
           {prevSlug && !prevSlug.startsWith('_') ? (
             <Link href={prevHref!} className="next-previous-btn">
               <span className="text-sm text-muted-highlight">Previous Page</span>
@@ -87,7 +75,7 @@ const DisplayContent = async ({ endpoint, slug }: Props) => {
           )}
         </div>
       </section>
-    </>
+    </div>
   );
 };
 

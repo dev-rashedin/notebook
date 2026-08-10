@@ -1,0 +1,141 @@
+# Servest — Backend Project Scaffolder & Add-ons Generator
+
+Every backend project starts the same way. `npm init -y`, install dependencies, write the same boilerplate folder structure, configure ESLint, set up Prisma or Mongoose, wire up auth. Hours of setup before a single line of real code gets written.
+
+Servest exists to eliminate that. It's an open source CLI toolkit — inspired by `create-vite` for scaffolding and `shadcn` for the add-ons concept — but built entirely for backend development.
+
+**Live at [servest.dev](https://servest.dev) — available on npm with 80+ downloads.**
+
+---
+
+## The Problem
+
+There are scaffolding tools for frontend. `create-vite`, `create-next-app`, `create-react-app` — all battle-tested, flexible, and fast. Backend has nothing equivalent. The existing options are either too opinionated, locked to a single framework, or don't support the add-ons workflow that makes shadcn so powerful for UI development.
+
+Every time I started a new backend project, I spent the first 1–2 hours on setup that had nothing to do with the actual problem I was solving. I built Servest to fix that — for myself first, and then for every backend developer with the same frustration.
+
+---
+
+## My Role
+
+Creator and sole maintainer — designed the architecture, built both packages, wrote the documentation site, and continue to maintain and extend the ecosystem.
+
+| Area | Responsibility |
+| --- | --- |
+| CLI Scaffolder | `create-servest` — interactive and non-interactive project generation |
+| Add-ons System | `servest` — add utilities, generate files, configure integrations |
+| Templates | Express (8 variants), Fastify (8 variants), Django |
+| Docs Site | Next.js, Tailwind CSS, Next MDX Remote |
+| CI/CD | GitHub Actions — automated testing and npm publish pipeline |
+
+---
+
+## How It Works
+
+Servest consists of two packages that work together:
+
+### create-servest — Project Scaffolding
+
+```bash
+npm create servest@latest my-app -- --template express-mvc-ts
+```
+
+Scaffolds a fully structured backend project instantly. Supports interactive mode (follow the prompts) and non-interactive mode (pass flags directly). Works with npm, yarn, pnpm, bun, and deno.
+
+### servest — Add-ons Generator
+
+```bash
+npx servest@latest add mongoose eslint-prettier f-auth
+```
+
+Runs inside any existing project — not just ones scaffolded with `create-servest`. Detects the project structure, installs required dependencies, generates the correct files and folders, and updates `package.json` scripts automatically.
+
+Multiple add-ons can be combined in a single command. If one fails, the rest still apply.
+
+---
+
+## Supported Templates
+
+### Express
+| Variant | Description |
+| --- | --- |
+| `express-basic-js` | Basic JavaScript |
+| `express-basic-ts` | Basic TypeScript |
+| `express-mvc-cjs` | MVC CommonJS |
+| `express-mvc-esm` | MVC ESM |
+| `express-mvc-ts` | MVC TypeScript |
+| `express-modular-cjs` | Modular CommonJS |
+| `express-modular-esm` | Modular ESM |
+| `express-modular-ts` | Modular TypeScript |
+
+### Fastify
+8 variants covering basic, MVC, and plugin architectures in JS, TS, CJS, and ESM.
+
+### Django
+`django-basic` — Django starter with Servest's project conventions.
+
+---
+
+## Add-ons System
+
+| Add-on | What it does |
+| --- | --- |
+| `mongoose` | Pre-configured Mongoose setup for MongoDB |
+| `prisma` | Prisma ORM with starter schema and migration commands |
+| `drizzle` | Drizzle ORM with SQLite support |
+| `eslint` | ESLint with recommended rules |
+| `prettier` | Prettier formatting config |
+| `eslint-prettier` | ESLint + Prettier integrated |
+| `lint-staged` | Pre-commit checks via lint-staged + simple-git-hooks |
+| `f-fileName` | Generate related files and folders per project structure |
+
+---
+
+## Technical Highlights
+
+### Structure-Aware File Generation
+
+The hardest part of building the add-ons system was making it structure-aware. A file generator that just dumps files into a folder isn't useful — `f-auth` needs to place files in the right location depending on whether the project is MVC or modular, whether it uses CJS or ESM, whether it's TypeScript or JavaScript.
+
+I solved this by building a `servest.config.json` detection system. Running `npx servest@latest init` inspects the project and writes a config file that all subsequent add-on commands read. Every add-on uses this config to generate files in the correct location with the correct syntax — no manual path configuration needed.
+
+### Resilient Add-on Execution
+
+Add-ons run sequentially but independently. If one add-on fails — a network error during npm install, a permission issue, a missing dependency — the rest of the queue continues. The failure is logged clearly and the developer can re-run just the failed add-on manually. This was a deliberate design decision: a partial setup is always better than a complete rollback.
+
+### CI/CD Pipeline
+
+Automated with GitHub Actions — tests run on every pull request and npm publish triggers automatically on version tag. This keeps both packages in sync and ensures no broken versions reach the registry.
+
+---
+
+## What's Next
+
+The roadmap for Servest is ambitious: become the `create-vite` for backend development across all major frameworks and runtimes.
+
+**Upcoming:**
+- NestJS, Laravel, and more framework support
+- **Browser-based UI** — developers will be able to select templates, structure, and add-ons from a visual interface, preview the generated project in the browser, and download it directly to open in their editor. No terminal commands required.
+
+---
+
+## Stack
+
+```
+CLI Packages:  Node.js, TypeScript, Vitest
+Docs Site:     Next.js, Tailwind CSS, Next MDX Remote
+CI/CD:         GitHub Actions
+Registry:      npm (create-servest + servest)
+```
+
+---
+
+## Results
+
+| Metric | Value |
+| --- | --- |
+| Setup time | ~2 hours → under 10 minutes |
+| npm downloads | 80+ developers |
+| Frameworks supported | Express, Fastify, Django |
+| Templates available | 17+ |
+| Satisfaction rating | 95% in developer feedback |
