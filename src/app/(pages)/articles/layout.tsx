@@ -1,12 +1,28 @@
-import { View, Text } from 'react-native'
-import React from 'react'
+import { ReactNode } from 'react';
+import LeftSidebar from '@/components/LeftSidebar';
+import { getContentLinks } from '@/lib';
+import MotionWrapper from '@/components/MotionWrapper';
+import DrawerContainer from '@/components/DrawerContainer';
+import { getNestedLinks } from '@/lib/getLinks';
 
-const layout = () => {
+export default function InterviewsLayout({ children }: { children: ReactNode }) {
+  const links = getContentLinks('articles');
+  
+  
+  const nestedLinks = getNestedLinks('articles');
+
   return (
-    <View>
-      <Text>layout</Text>
-    </View>
-  )
-}
+    <main className="lg:flex">
+      <div className="sidebar">
+        <LeftSidebar links={links} type="notes" nestedLinks={nestedLinks} />
+      </div>
 
-export default layout
+      {/* content area */}
+      <div className="docs-content relative">
+        <DrawerContainer links={links} type="notes" nestedLinks={nestedLinks}>
+          <MotionWrapper>{children}</MotionWrapper>
+        </DrawerContainer>
+      </div>
+    </main>
+  );
+}
