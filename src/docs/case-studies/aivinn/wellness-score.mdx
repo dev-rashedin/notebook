@@ -314,3 +314,101 @@ Counts **lifetime** completions, not per-cycle — meaning this component is mon
 
 ---
 
+## Score Bounds & the Clamp
+
+```typescript
+const finalScore = clamp(
+  Math.round(habitScore + budgetScore + incomeStabilityScore + goalScore + challengeScore),
+  60,
+  100,
+);
+```
+
+As shown in Decision 6, this clamp is mathematically a no-op given the component ranges — but it's kept in place as a defensive guard against any future change to a component's range accidentally producing an out-of-bounds total.
+
+---
+
+## Read-Time Scoring & Labeling
+
+A separate, read-only function computes the score on demand — using the same five compute functions, run in parallel — without persisting anything. This is what powers any "check your score right now" view that shouldn't wait for a trigger event.
+
+```typescript
+const getWellnessScore = async (walletId: string) => {
+  const wallet = await prisma.wallets.findUnique({
+    where: { id: walletId },
+    select: { payday: true },
+  });
+  if (!wallet) throw new NotFoundError('Wallet not found.');
+
+  const [habitScore, budgetScore, incomeStabilityScore, goalScore, challengeScore] =
+    await Promise.all([
+      computeHabitScore(walletId),
+      computeBudgetScore(walletId, wallet.payday),
+      computeIncomeStabilityScore(walletId, wallet.payday),
+      computeGoalScore(walletId, wallet.payday),
+      computeChallengeScore(walletId),
+    ]);
+
+  const score = Math.min(
+    Math.max(
+      Math.round(habitScore + budgetScore + incomeStabilityScore + goalScore + challengeScore),
+      60,
+    ),
+    100,
+  );
+
+  let label = '';
+  let tone = '';
+  let message = '';
+
+  if (score >= 85) {
+    label = 'Thriving'; tone = 'celebratory';
+    message = "You're doing great — keep this up.";
+  } else if (score >= 75) {
+    label = 'On Track'; tone = 'encouraging';
+    message = "Solid progress — let's keep the momentum.";
+  } else if (score >= 65) {
+    label = 'Building'; tone = 'supportive';
+    message = "You're making progress. Focus on one thing at a time.";
+  } else {
+    label = 'Getting Started'; tone = 'empathetic';
+    message = "Let's figure this out together — one step at a time.";
+  }
+
+  return { score, label, tone, message };
+};
+```
+
+**Why a duplicate calculation path instead of just reading the last persisted score:** the persisted `wellness_score` row can lag behind reality between triggers (e.g. right after a pay cycle rolls over, before any new transaction fires a recompute). `getWellnessScore` guarantees an always-fresh number at the cost of recomputing all five components on every call — acceptable since it's read-only and not on any hot path that fires per keystroke.
+
+**Notable duplication:** the clamp logic and bucket thresholds are re-implemented independently in this function rather than reusing the persisted-write path's helpers. This is worth flagging as technical debt — a future change to a threshold would need to be applied in both places.
+
+---
+
+## Push Notification Thresholds
+
+Fired only from the persisted-write path (`recalculateWellnessScore`), not from the read-only `getWellnessScore`:
+
+```typescript
+const previousScore = existingWellness?.score ? toNumber(existingWellness.score) : null;
+const crossedDown = previousScore !== null && previousScore > 65 && finalScore <= 65;
+const crossedUp = previousScore !== null && previousScore < 95 && finalScore >= 95;
+```
+
+Both are **edge-crossing** checks, not level checks — they fire once, at the moment of crossing, and won't re-fire while the score sits on one side of the threshold. `previousScore !== null` guards against firing on a brand-new wallet's first-ever score (there's no "previous" to have crossed from).
+
+---
+
+## Known Trade-offs & Lessons Learned
+
+1. **The core tension is spec vs. implementation, not a bug.** The original leadership spec implied continuous, granular movement; the implementation is a small number of discrete buckets per component. Both are internally consistent — they're just different products. Documenting this explicitly (rather than treating "the score doesn't move" as a defect to silently patch) was the most useful output of this write-up.
+
+2. **"No data = best case" is the single biggest contributor to perceived staleness.** Two of five components (Budget, Income Stability) return their maximum score when there's simply no data to evaluate, rather than a neutral or lowest value. This was a reasonable choice to avoid punishing incomplete onboarding, but it means disengaged users and ideal users can be indistinguishable on those two components.
+
+3. **Binary completion credit trades responsiveness for simplicity.** Goal and Challenge scores only move on full completion. This is the cheapest possible signal to compute, but it's also the least responsive — a user working steadily toward a goal gets zero score feedback for that effort until the last moment.
+
+4. **Trigger-scoped recomputation is efficient but breaks the "any progress should move the score" intuition.** It's correct behavior for each individual component, but it means the *felt* responsiveness of the score depends on which trigger fired, not just on what the user did.
+
+5. **If leadership's original continuous-movement intent is a hard requirement, the fix is architectural, not cosmetic.** Moving from discrete buckets to a continuous formula (e.g. scoring budget adherence as a smooth function of ratio rather than 6 fixed steps) and adding partial-progress credit for goals/challenges would address the "doesn't move" complaint directly — but it's a rework of the scoring model itself, not a tuning tweak to the current one.
+
+6. **A defensive clamp that turns out to be mathematically redundant is still worth keeping.** It costs nothing and protects against a future component-range change silently producing an invalid score — but it shouldn't be mistaken for a meaningful part of the current score's behavior.
