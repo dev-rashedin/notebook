@@ -53,7 +53,7 @@ export const nestedDocsOrder: Record<string, { label: string; items: string[] }[
   'case-studies': [
     {
       label: 'aivinn',
-      items: ['overview', 'challenge-system',],
+      items: ['overview', 'wellness-score', 'challenge-system',],
     },
     {
       label: 'servest',

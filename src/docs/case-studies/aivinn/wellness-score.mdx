@@ -209,3 +209,108 @@ export const computeBudgetScore = async (walletId: string, payday: number): Prom
 
 Bound to the user's current pay cycle (`computeCycle(payday)`), not a calendar month — so score movement is anchored to when the user actually gets paid, not an arbitrary date boundary.
 
+### Income Stability Score (10–20)
+
+```typescript
+export const computeIncomeStabilityScore = async (
+  walletId: string,
+  payday: number,
+): Promise<number> => {
+  const cycle = computeCycle(payday);
+  const cycleTransactions = await prisma.transactions.findMany({
+    where: { wallet_id: walletId, date: { gte: cycle.start_date, lte: cycle.end_date } },
+    select: { amount: true, type: true },
+  });
+
+  const totalIncome = cycleTransactions.filter(tx => tx.type === 'INCOME')
+    .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
+  if (totalIncome === 0) return 20;
+
+  const totalExpenses = Math.abs(
+    cycleTransactions.filter(tx => tx.type === 'EXPENSE')
+      .reduce((sum, tx) => sum + toNumber(tx.amount), 0),
+  );
+  if (totalExpenses === 0) return 20;
+
+  const ratio = totalExpenses / totalIncome;
+  if (ratio <= 1.0) return 20;
+  if (ratio <= 1.1) return 18;
+  if (ratio <= 1.25) return 16;
+  if (ratio <= 1.5) return 14;
+  if (ratio <= 1.75) return 12;
+  return 10;
+};
+```
+
+Structurally identical to Budget Score — same bucket thresholds, same shape — just measured against income instead of a set budget. This symmetry was intentional: a user who spends within a self-set budget *and* within their actual income gets rewarded on both axes, rather than one subsuming the other.
+
+### Goal Score (10–15)
+
+```typescript
+export const computeGoalScore = async (walletId: string, payday: number): Promise<number> => {
+  const goals = await prisma.goals.findMany({
+    where: { wallet_id: walletId },
+    select: {
+      id: true, goal_type: true, target_amount: true, saved_amount: true,
+      target_date: true, start_date: true, created_at: true, category_id: true,
+    },
+  });
+
+  if (goals.length === 0) return 10;
+
+  const cycle = computeCycle(payday);
+  const budgetLimitGoals = goals.filter(g => g.goal_type === 'BUDGET_LIMIT');
+
+  let transactions: { category_id: string; amount: any; date: Date }[] = [];
+  if (budgetLimitGoals.length > 0) {
+    transactions = await prisma.transactions.findMany({
+      where: {
+        wallet_id: walletId,
+        type: 'EXPENSE',
+        OR: budgetLimitGoals.map(g => ({
+          category_id: g.category_id,
+          date: { gte: cycle.start_date, lte: cycle.end_date },
+        })),
+      },
+      select: { category_id: true, amount: true, date: true },
+    });
+  }
+
+  let completedCount = 0;
+  for (const goal of goals) {
+    if (goal.goal_type === 'SAVING_GOAL') {
+      if (toNumber(goal.saved_amount) >= toNumber(goal.target_amount)) completedCount++;
+    } else if (goal.goal_type === 'BUDGET_LIMIT') {
+      const spent = transactions
+        .filter(tx => tx.category_id === goal.category_id)
+        .reduce((sum, tx) => sum + Math.abs(toNumber(tx.amount)), 0);
+      if (spent <= toNumber(goal.target_amount)) completedCount++;
+    }
+  }
+
+  if (completedCount === 0) return 10;
+  if (completedCount === 1) return 12;
+  return 15;
+};
+```
+
+Notably, `BUDGET_LIMIT`-type goal transactions are only fetched **if** at least one such goal exists (`budgetLimitGoals.length > 0`) — a cheap short-circuit avoiding an unnecessary query for wallets that only use `SAVING_GOAL`-type goals.
+
+### Challenge Score (10–15)
+
+```typescript
+export const computeChallengeScore = async (walletId): Promise<number> => {
+  const completedChallenges = await prisma.user_challenges.count({
+    where: { wallet_id: walletId, status: 'COMPLETED' },
+  });
+
+  if (completedChallenges === 0) return 10;
+  if (completedChallenges === 1) return 12;
+  return 15;
+};
+```
+
+Counts **lifetime** completions, not per-cycle — meaning this component is monotonic and can only increase over time (barring a manual data correction). Unlike every other component, it has no mechanism to decrease.
+
+---
+
