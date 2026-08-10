@@ -7,8 +7,6 @@ import { getNestedLinks } from '@/lib/getLinks';
 
 export default function NotesLayout({ children }: { children: ReactNode }) {
   const links = getContentLinks('notes');
-
-  console.log('links', links);
   
   
   const nestedLinks = getNestedLinks('notes');
