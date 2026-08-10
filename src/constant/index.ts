@@ -60,7 +60,7 @@ export const nestedDocsOrder: Record<string, { label: string; items: string[] }[
       items: ['overview'],
     },
      {
-      label: 'tech-insight',
+      label: 'tech-insights',
       items: ['overview'],
     },
   ],
