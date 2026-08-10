@@ -1,0 +1,103 @@
+# Aivinn Wellness Score: A Behavior-Driven Financial Health Metric — Case Study
+
+## Table of Contents
+1. [Background & Problem Statement](#background--problem-statement)
+2. [System Design Decisions](#system-design-decisions)
+3. [Score Composition](#score-composition)
+4. [Trigger-Based Recalculation](#trigger-based-recalculation)
+5. [Component Deep Dive](#component-deep-dive)
+6. [Score Bounds & the Clamp](#score-bounds--the-clamp)
+7. [Read-Time Scoring & Labeling](#read-time-scoring--labeling)
+8. [Push Notification Thresholds](#push-notification-thresholds)
+9. [Known Trade-offs & Lessons Learned](#known-trade-offs--lessons-learned)
+
+---
+
+## Background & Problem Statement
+
+The Wellness Score is a single composite number (60–100) meant to summarize a user's financial health at a glance — the kind of metric a user checks the way they'd check a credit score, without needing to interpret five separate charts.
+
+Leadership's original specification called for a more granular, continuously-responsive calculation — score movement was expected to track behavior closely and smoothly, cycle over cycle. During implementation, that spec was simplified into a coarser, bucket-based model: five independent sub-scores, each computed from a small number of discrete rules, summed into a final total. The simplification made the logic easy to reason about, easy to test, and cheap to compute on every relevant event.
+
+That trade-off surfaced later as a real product tension: after launch, the score was reported as feeling "stuck" — not reflecting day-to-day changes in user behavior the way the original spec implied it should. This document describes the system **as actually implemented**, and calls out explicitly where that implementation diverges from a continuous-movement model, since that divergence is the root of the discrepancy.
+
+---
+
+## System Design Decisions
+
+### Decision 1: Five independent weighted components, not one formula
+
+Rather than a single opaque calculation, the score is split into five components — Habit, Budget, Income Stability, Goal, Challenge — each computed independently and summed.
+
+**Why:** independent components are individually testable, individually explainable to a user ("your budget adherence dropped, that's why"), and can be recomputed selectively depending on what triggered the update (see Decision 2). A single monolithic formula would make all three of those harder.
+
+### Decision 2: Trigger-scoped partial recomputation
+
+The score is not recalculated wholesale on every relevant action. Instead, each trigger recomputes only the components it's actually relevant to:
+
+| Trigger | Habit | Budget | Income Stability | Goal | Challenge |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `TRANSACTION` | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `GOAL` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `CHALLENGE` | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+**Why:** a transaction plausibly affects habit, budget, income, and goal progress all at once, so it's worth recomputing all four together. But a challenge completion has no bearing on, say, budget adherence — recomputing it anyway would just mean extra DB queries for a value that hasn't actually changed. Non-recomputed components simply retain their last stored value.
+
+**Trade-off worth naming:** this means a challenge completion never re-evaluates habit/budget/income in the same request. If the CEO's mental model was "any positive action should feel like it moves the whole score," trigger-scoping breaks that intuition, even though each individual number stays technically correct.
+
+### Decision 3: Step-function buckets over continuous scaling
+
+Budget Score and Income Stability Score are both computed from a spend-to-budget (or spend-to-income) ratio, but mapped onto a fixed 6-level scale instead of a continuous curve:
+
+```
+≤1.00 → 20
+≤1.10 → 18
+≤1.25 → 16
+≤1.50 → 14
+≤1.75 → 12
+ >1.75 → 10
+```
+
+Goal Score and Challenge Score go further, with only 3 levels each (based on count of fully-completed items: 0 / 1 / 2+).
+
+**Why:** discrete buckets are simple to reason about and simple to explain in a notification ("you crossed into the next tier"). The trade-off is the one at the center of the CEO's feedback: two users with meaningfully different spending ratios (say, 1.02x vs 1.09x budget) score identically, because both land in the same bucket. The score only visibly moves when a threshold is crossed, not proportionally to the underlying behavior.
+
+### Decision 4: "No data" defaults to best case, not neutral
+
+```typescript
+if (!activeBudget) return 20;          // no budget set → max score
+if (totalIncome === 0) return 20;      // no income logged → max score
+if (totalExpenses === 0) return 20;    // no expenses logged → max score
+```
+
+**Why:** the reasoning at implementation time was to avoid penalizing users for incomplete setup (e.g. a brand-new wallet with no budget configured yet shouldn't look "unhealthy"). In practice, this means disengagement (not setting a budget, not logging income) is scored identically to ideal behavior (staying perfectly within budget) — which is a real source of the "score doesn't move" perception, since it can mask genuinely absent data as a maxed-out component.
+
+### Decision 5: Binary completion credit — no partial credit
+
+Goal Score and Challenge Score only count **fully completed** items. A savings goal at 95% progress contributes exactly the same as one at 0%.
+
+**Why:** completion is unambiguous and cheap to compute (a count query), whereas partial-progress weighting would require normalizing across goal types (`SAVING_GOAL` vs `BUDGET_LIMIT`) with very different progress semantics. The cost is that a user who is actively, visibly making progress toward a goal sees zero score movement from that effort until the moment of completion.
+
+### Decision 6: Fixed 60–100 range that mirrors the components' natural bounds
+
+```typescript
+const finalScore = clamp(
+  Math.round(habitScore + budgetScore + incomeStabilityScore + goalScore + challengeScore),
+  60,
+  100,
+);
+```
+
+The five components' individual min/max values sum to exactly 60 and exactly 100:
+
+| Component | Min | Max |
+|---|---|---|
+| Habit | 20 | 30 |
+| Budget | 10 | 20 |
+| Income Stability | 10 | 20 |
+| Goal | 10 | 15 |
+| Challenge | 10 | 15 |
+| **Total** | **60** | **100** |
+
+**Why this matters:** the `clamp(60, 100)` never actually clips a real computed value — it's a defensive floor/ceiling that happens to be mathematically redundant given the component ranges. Worth knowing so nobody mistakes it for an active constraint shaping score behavior; it isn't one.
+
