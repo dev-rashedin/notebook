@@ -22,7 +22,7 @@ export default function CaseStudiesLayout({ children }: { children: ReactNode })
       {/* content area */}
       <div className="docs-content relative">
         <DrawerContainer links={links} type="case-studies" nestedLinks={nestedLinks}>
-          <MotionWrapper>{children}</MotionWrapper>
+          <MotionWrapper type="docs">{children}</MotionWrapper>
         </DrawerContainer>
       </div>
     </main>

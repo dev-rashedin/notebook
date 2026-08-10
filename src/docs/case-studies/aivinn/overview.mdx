@@ -1,1 +1,123 @@
-# Aivinn Case Studies
+# Aivinn — AI-Powered Financial Assistant
+
+Aivinn is a production mobile app that helps users manage their personal finances through natural conversation. Instead of navigating menus or filling spreadsheets, users simply talk to an AI — logging transactions, setting goals, tracking budgets, and getting insights, all in one continuous chat experience.
+
+The app is live on the **App Store** and **Play Store**, built entirely by me as the sole engineer.
+
+---
+
+## The Problem
+
+Most personal finance apps treat money as a collection of transactions. Aivinn treats it as a lived experience. The core idea: financial stress shapes everyday decisions, yet traditional tools still require users to open menus, categorize expenses manually, and remember to check their own progress.
+
+Aivinn replaces that friction with conversation. A user types "dinner 20" and the AI logs it, categorizes it, and integrates it into their financial picture — instantly.
+
+---
+
+## My Role
+
+I designed and built Aivinn end-to-end as the sole engineer — from product architecture and database schema to mobile client, backend APIs, AI infrastructure, and deployment.
+
+| Area | Responsibility |
+| --- | --- |
+| Mobile | React Native (Expo), custom SSE client, session management |
+| Backend | Node.js, Express, PostgreSQL, Prisma, Redis |
+| AI Infrastructure | LangChain, LangGraph, Anthropic Claude, agentic memory, RAG pipelines |
+| Auth & Payments | Clerk, RevenueCat |
+| Ops Dashboard | Sentry, Grafana, RevenueCat, shadcn UI |
+| DevOps | VPS hosting, CI/CD, cron jobs |
+
+---
+
+## Core Features
+
+**Conversational finance** — Users interact with their finances through chat. The AI understands natural language, processes receipts and PDF statements, categorizes transactions automatically, and detects recurring patterns like subscriptions and monthly bills.
+
+**Agentic memory** — Unlike traditional chatbots, Aivinn remembers users across sessions. It stores structured summaries of goals, spending habits, and financial concerns, allowing the assistant to follow up naturally in later conversations.
+
+**Proactive insights** — A background agent monitors transaction history and past conversations, surfacing gentle nudges when spending shifts, bills approach, or savings targets are at risk.
+
+**Multimodal input** — Users can type, speak, or upload receipts, PDFs, and screenshots. The system extracts and processes the relevant information automatically.
+
+**Financial wellness score** — A personalized metric reflecting income stability, spending behavior, savings progress, and upcoming commitments — giving users an immediate sense of their financial health.
+
+---
+
+## Technical Highlights
+
+### Agentic Memory System — 97% Token Cost Reduction
+
+The core challenge with chat AI: the more users talk, the more expensive every message becomes. LangGraph's default `MemorySaver` accumulates messages in a thread forever — a user with 200 messages sends all 200 with every new request.
+
+I solved this by designing a session-scoped memory architecture:
+
+- Every app open generates a fresh `sessionId`, creating a new LangGraph thread
+- After each message, a background agent asynchronously compresses the last 30 messages into a 250-word summary stored in PostgreSQL
+- On next session open, the summary is injected as context — the AI knows the user's full history without carrying the full history
+
+**Result: per-message token cost dropped from ~15,000 to ~450 tokens — a 97% reduction.**
+
+> A dedicated case study covering the full implementation is available — architecture, database schema, cooldown logic, and session management.
+
+---
+
+### SSE Streaming — 2.5x Faster Response Times
+
+Blocking HTTP requests meant users stared at a blank screen for up to 9 seconds before seeing any response. I replaced this with SSE streaming using LangChain's `streamMode` and built a custom React Native SSE client to handle the stream on mobile.
+
+**Result: time-to-first-content improved from ~6–9s to ~2.5–4s (2.5x faster). Total response time reduced by ~60%.**
+
+> A dedicated case study covering the SSE implementation is available.
+
+---
+
+### Prompt Caching — 90% API Cost Reduction
+
+Implemented Anthropic's prompt caching for the system prompt, which remains constant across requests. Combined with the session-based memory system which eliminated growing message history from context, this significantly reduced the total API spend.
+
+**Result: ~90% reduction in LLM API costs.**
+
+---
+
+### Performance
+
+Drove the app's Lighthouse performance score from **64 → 96** through bundle optimization, lazy loading, and rendering improvements across the web client.
+
+---
+
+## Ops Dashboard
+
+Built an internal dashboard for the Aivinn team aggregating:
+
+- **Sentry** — frontend and backend error tracking
+- **Grafana** — server logs and performance metrics
+- **RevenueCat** — subscription and payment data
+- **Database** — user activity and wallet stats
+
+All displayed in a unified shadcn UI interface, giving the team full visibility into app health and user activity without switching between tools.
+
+---
+
+## Stack
+
+```
+Mobile:     React Native, Expo, TypeScript
+Backend:    Node.js, Express, PostgreSQL, Prisma, Redis
+AI:         LangChain, LangGraph, Anthropic Claude
+Auth:       Clerk
+Payments:   RevenueCat
+Monitoring: Sentry, Grafana
+Hosting:    VPS
+```
+
+---
+
+## Results
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Token cost per message | ~15,000 tokens | ~450 tokens (**97% reduction**) |
+| Time-to-first-content | ~6–9s | ~2.5–4s (**2.5x faster**) |
+| Total response time | ~10–22s | ~4–6s (**~60% reduction**) |
+| LLM API cost | Baseline | **~90% reduction** |
+| Lighthouse score | 64 | **96** |
