@@ -42,7 +42,7 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
                 key={item.label}
                 className={`text-[16px] font-semibold  ${item.label === "Introduction" || item.label === "Templates" ? "" : "pt-3 border-t border-c-logo mt-3"} `}
               >
-                {item.label}
+                {formatLabel(item.label)}
               </p>
             );
           }
@@ -61,7 +61,17 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
               className={`w-full max-w-fit relative group ${isActive ? "text-brand font-medium" : ""}`}
               onClick={() => setSidebarOpen && setSidebarOpen(false)}
             >
-              {item.slug === "index" ? "Overview" : item.label}
+              {item.slug === "index"
+                ? pathname.includes("/case-studies")
+                  ? "Case Studies"
+                  : pathname.includes("/notes")
+                    ? "Notes"
+                    : pathname.includes("/articles")
+                      ? "Articles"
+                      : pathname.includes("/interviews")
+                        ? "Interviews"
+                        : "Overview"
+                : item.label}
               <AnimatedBorder />
             </Link>
           );
@@ -91,7 +101,7 @@ const LeftSidebar = ({ links, type, nestedLinks }: DrawerProps) => {
                   <RiArrowRightDoubleFill />
                 </span>
 
-                {cat.label}
+                {formatLabel(cat.label)}
               </p>
 
               {/* Sub-items (express-basic-js, etc.) */}

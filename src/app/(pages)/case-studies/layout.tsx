@@ -7,8 +7,6 @@ import { getNestedLinks } from '@/lib/getLinks';
 
 export default function CaseStudiesLayout({ children }: { children: ReactNode }) {
   const links = getContentLinks('case-studies');
-
-  console.log('links', links);
   
   
   const nestedLinks = getNestedLinks('case-studies');

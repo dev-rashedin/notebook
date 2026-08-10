@@ -26,33 +26,7 @@ const DisplayContent = async ({ endpoint, slug }: Props) => {
       {/* Previous / Next navigation */}
 
       <section className="max-w-3xl pt-40 pb-60">
-        {/* community */}
-        {isIndex && (
-          <>
-            <Divider />
-            <h3 className="text-xl lg:text-2xl font-bold mt-8 pb-4">Community</h3>
-            <p className="w-full text-muted-foreground lg:text-[16px]">
-              If you have questions or feedback, reach out to the community at{' '}
-              <a
-                className="text-brand underline hover:brightness-105"
-                href="https://discord.gg/AhqDGZj3"
-                target="_blank"
-              >
-                Discord
-              </a>{' '}
-              and
-              <br />
-              <a
-                className="text-brand underline hover:brightness-105"
-                href="https://github.com/dev-rashedin/servest/discussions"
-                target="_blank"
-              >
-                GitHub Discussions
-              </a>
-              .
-            </p>
-          </>
-        )}
+
 
         <div className={`${isIndex ? 'mt-28' : ''}`}>
           <Link

@@ -1,0 +1,88 @@
+# Tech Insights — Full-Stack Tech News Platform
+
+Tech Insights is a full-stack news platform where users browse the latest tech articles, purchase premium memberships via Stripe, and manage their own posts. Built in 2 months as a solo project, it covers the full spectrum of a production web app — authentication, payments, content management, and an admin dashboard.
+
+---
+
+## My Role
+
+Full-Stack Developer — designed and built the entire platform from scratch, including the React frontend, Node.js/Express backend, MongoDB database, JWT authentication, Stripe integration, and admin dashboard.
+
+| Area | Responsibility |
+| --- | --- |
+| Frontend | React, Tailwind CSS, Chakra UI, DaisyUI, TanStack Query |
+| Backend | Node.js, Express, MongoDB, Mongoose |
+| Auth | JWT — signup, login, protected routes |
+| Payments | Stripe Payment Gateway — premium membership |
+| Admin | Dashboard for user, article, and membership management |
+
+---
+
+## Core Features
+
+**Article browsing** — Users can browse and read free tech articles with a clean, responsive UI. Premium articles are gated behind a membership paywall.
+
+**Premium membership via Stripe** — Users can purchase a premium membership to unlock all content. Stripe handles the full payment flow including error handling and confirmation.
+
+**JWT authentication** — Secure signup and login with JWT tokens protecting all private routes and enabling full CRUD on user-owned posts.
+
+**User dashboard** — Authenticated users can create, read, update, and delete their own articles from a dedicated dashboard.
+
+**Admin dashboard** — Admins have full visibility and control over users, articles, posts, and premium members — all from one interface.
+
+---
+
+## Technical Highlights
+
+### MongoDB Aggregation Pipelines
+
+Standard queries weren't enough for the platform's data needs — pagination, search, sorting, and filtering across nested fields required a more powerful approach. I implemented MongoDB aggregation pipelines to handle all of this efficiently in a single query layer.
+
+The main challenges were managing multiple nested fields and grouping data correctly across the pipeline stages. After working through the official MongoDB documentation and testing edge cases, the final implementation handled all retrieval patterns reliably — fast searches, correct pagination, and accurate sorting across the full article dataset.
+
+---
+
+### Stripe Payment Integration
+
+Integrating Stripe was the most complex part of the project. The requirements were straightforward — users pay once for a premium membership — but the implementation needed to handle the full payment lifecycle: intent creation, confirmation, failure handling, and membership status updates on the backend.
+
+**The flow:**
+
+```
+User clicks upgrade → frontend creates payment intent via backend
+→ Stripe processes payment → webhook confirms success
+→ backend updates user membership status in MongoDB
+→ frontend unlocks premium content
+```
+
+Key decisions made during implementation:
+
+- Payment intents created server-side to keep secret keys off the client
+- Webhook verification to ensure only genuine Stripe events trigger membership upgrades
+- Robust error handling at every step — failed payments surface clear user feedback without leaving the membership in an inconsistent state
+
+---
+
+### TanStack Query for Data Fetching
+
+Replaced standard `useEffect` data fetching with TanStack Query across the frontend. This gave the app automatic caching, background refetching, loading and error states out of the box — significantly reducing boilerplate and improving perceived performance, especially on article list pages with heavy data.
+
+---
+
+## Stack
+
+```
+Frontend:  React, Tailwind CSS, Chakra UI, DaisyUI, TanStack Query
+Backend:   Node.js, Express, MongoDB, Mongoose
+Auth:      JWT
+Payments:  Stripe
+Hosting:   Firebase (client), Railway (server)
+```
+
+---
+
+## Challenges & Solutions
+
+**MongoDB aggregation complexity** — Managing nested fields and multi-stage pipelines was unfamiliar territory. Resolved by working through the official documentation methodically and testing each pipeline stage in isolation before combining them.
+
+**Stripe integration** — The payment lifecycle had more moving parts than expected. Resolved by following Stripe's official documentation closely, implementing server-side payment intents, and using webhooks for reliable membership confirmation rather than relying on client-side redirects.
