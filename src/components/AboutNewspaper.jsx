@@ -1,22 +1,9 @@
 import { FaGithub, FaLinkedin } from 'react-icons/fa';
-import { HiOutlineMail } from 'react-icons/hi';
-import { HiOutlineGlobeAlt } from 'react-icons/hi';
 import Image from 'next/image';
 import { RiMvAiLine } from 'react-icons/ri';
 import { BiGlobe } from 'react-icons/bi';
 import { BsArrowUpRightCircle } from 'react-icons/bs';
 
-/**
- * AboutNewspaper — "The Daily Build"
- * A broadsheet-styled About section for an AI-focused Software Engineer portfolio.
- *
- * Drop into a Next.js + Tailwind project as-is. Swap the <img> tags for next/image
- * if you want automatic optimization, and <a> tags for next/link where useful.
- *
- * Wire it up to your existing data layer:
- *   const stats = await fetchPortfolioStats();
- *   <AboutNewspaper stats={stats} />
- */
 
 const DEFAULT_STATS = {
   experience: '2+',
