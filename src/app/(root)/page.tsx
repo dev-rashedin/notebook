@@ -37,8 +37,8 @@ export default function HomePage() {
           "Reporting by Rashedin Islam",
           "Single Correspondent Edition",
         ]}
-        lead="This is where case studies, interviews, notes, and articles get filed as they happen — a working notebook rather than a polished portfolio. Expect rough edges, real experiments, and the occasional dead end."
-        description="No editorial calendar, no publishing schedule — just a record kept as the work happens."
+        lead="This is where case studies, interviews, notes, and articles get filed as they happen — a working notebook rather than a polished portfolio. Expect rough edges, real experiments, and the occasional dead end. Some entries are finished thoughts; others are half-formed ideas written down before they're lost. Nothing here is edited for show — it's kept the way it was written, on the day it was written."
+        description="No editorial calendar, no publishing schedule — just a record kept as the work happens. It grows the way the work grows: unevenly, in bursts, with long quiet stretches in between. Come back when you're curious, not because anything's due."
         sidebarTitle="In This Issue"
         sidebarItems={ISSUE_INDEX}
       />
