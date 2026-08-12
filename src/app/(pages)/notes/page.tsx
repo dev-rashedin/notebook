@@ -1,4 +1,3 @@
-// app/notes/page.tsx
 import { SectionHome } from "@/components/ui/home-page-ui";
 
 const SECTION_NOTES = [
