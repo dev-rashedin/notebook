@@ -5,72 +5,11 @@ import { BiGlobe } from 'react-icons/bi';
 import { BsArrowUpRightCircle } from 'react-icons/bs';
 
 
-function StatCell({ value, label, last }) {
-  return (
-    <div
-      className={`flex flex-col items-center px-4 py-1 ${
-        last ? '' : 'border-r border-border/30'
-      }`}
-    >
-      <span className=" text-xl sm:text-2xl text-foreground leading-none">
-        {value}
-      </span>
-      <span className=" text-[9px] sm:text-[10px] tracking-widest text-foreground/60 uppercase mt-1">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function SkillBlock({ title, items }) {
-  return (
-    <div className="mb-8">
-      <h4 className=" text-xs uppercase tracking-[0.2em] text-brand font-bold mb-2 pb-1 border-b-2 border-red-800 inline-block">
-        {title}
-      </h4>
-      <p className=" text-[15px] leading-7 text-foreground/80 text-justify">
-        {items.join(' · ')}
-      </p>
-    </div>
-  );
-}
-
 export default function AboutNewspaper({ stats = DEFAULT_STATS }) {
   return (
     <section className="w-full bg-[#F3EFE4] text-foreground">
-      {/* import fonts — remove if already loaded globally in your app */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        . { font-family: 'Source Serif 4', Georgia, serif; }
-        .font-display { font-family: 'Playfair Display', Georgia, serif; }
-        . { font-family: 'JetBrains Mono', ui-monospace, monospace; }
-        .drop-cap::first-letter {
-          font-family: 'Playfair Display', Georgia, serif;
-          float: left;
-          font-size: 3.6rem;
-          line-height: 0.8;
-          font-weight: 900;
-          padding-right: 0.35rem;
-          padding-top: 0.2rem;
-        }
-      `}</style>
-
       <div className="max-w-5xl mx-auto border-2 border-border px-5 sm:px-10 py-6 sm:py-8">
-        {/* masthead top bar */}
-        <div className="flex-between  text-[10px] sm:text-xs uppercase tracking-widest border-b border-border pb-2">
-          <span>rashedin.dev</span>
-          <span>Issue No. 001 — {todayStamp()}</span>
-        </div>
 
-        {/* masthead */}
-        <div className="text-center py-5 sm:py-7">
-          <p className=" text-[10px] sm:text-xs tracking-[0.3em] text-brand uppercase mb-2">
-            GenAI Engineering Edition
-          </p>
-          <h1 className="font-display font-black text-4xl sm:text-6xl tracking-tight">
-            THE DAILY <span className="text-brand">BUILD</span>
-          </h1>
-        </div>
 
         {/* black subhead bar */}
         <div className="bg- text-[#F3EFE4]  text-[10px] sm:text-xs uppercase tracking-widest px-4 py-2 flex-between">
