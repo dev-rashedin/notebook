@@ -1,0 +1,222 @@
+# 10 Small But Super Effective React Native Tricks Every Beginner Should Know
+
+When you're new to React Native, most tutorials focus on the big stuff: navigation, state management, styling. But there's a whole layer of small, built-in APIs that quietly make apps feel *professional* — things like knowing when the app goes to the background, showing a "no internet" banner, or making the phone vibrate on a button tap.
+
+None of these require third-party libraries (well, one does, and it's tiny). They're all part of React Native itself or a single well-known community package. Let's go through all 10, one at a time, with real-world scenarios you'll actually run into.
+
+* * *
+
+## 1\. AppState — Know When Your App Goes to the Background
+
+`AppState` Tells you whether your app is currently active (visible on screen), in the background (user switched apps), or inactive (mid-transition, iOS only).
+
+**Why it matters:** Phones aren't like websites. Users constantly jump out of your app to check a message, then come back. Sometimes you need to *react* to that.
+
+Imagine a food delivery app. When the user backgrounds the app for 10 minutes and comes back, you probably want to refresh the order status automatically instead of showing stale data.
+
+```typescript
+import { AppState } from 'react-native';
+import { useEffect, useRef } from 'react';
+
+useEffect(() => {
+  const subscription = AppState.addEventListener('change', (nextState) => {
+    if (nextState === 'active') {
+      console.log('App came back to the foreground — refresh data!');
+    }
+  });
+
+  return () => subscription.remove();
+}, []);
+```
+
+Another common use: pausing a video or a timer when the app is backgrounded, so it doesn't keep playing sound while the user is in WhatsApp.
+
+* * *
+
+## 2\. KeyboardAvoidingView — Stop the Keyboard From Covering Your Inputs
+
+`KeyboardAvoidingView` automatically shifts your layout up when the on-screen keyboard opens, so text inputs and buttons don't end up hidden behind it. For scrollable forms, `KeyboardAwareScrollView` (from `react-native-keyboard-aware-scroll-view`, or the newer `react-native-keyboard-controller`) is often the smoother choice, since it also scrolls the focused input into view.
+
+**Why it matters:** The keyboard covering half the screen is one of the most common UI headaches in mobile apps. A text input pinned to the bottom of the screen can get completely hidden the moment the user taps it, which makes a login form or comment box unusable if you don't handle it.
+
+Think about a login screen with an email field, a password field, and a "Log In" button stacked near the bottom. Without any handling, tapping the password field pops the keyboard up and buries the "Log In" button underneath it. Wrapping the form in `KeyboardAvoidingView` pushes everything up automatically so the button stays visible and tappable.
+
+```typescript
+import { KeyboardAvoidingView, Platform, TextInput, Button } from 'react-native';
+
+function LoginForm() {
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <TextInput placeholder="Email" />
+      <TextInput placeholder="Password" secureTextEntry />
+      <Button title="Log In" onPress={handleLogin} />
+    </KeyboardAvoidingView>
+  );
+}
+```
+
+**A side note:** if you need to know *that* the keyboard opened or closed — not to move layout, but to react somewhere else on screen, like hiding a bottom tab bar while the user types — that's what the raw `Keyboard` API is for:
+
+```typescript
+import { Keyboard } from 'react-native';
+import { useEffect, useState } from 'react';
+
+const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+useEffect(() => {
+  const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+  const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+  return () => {
+    showSub.remove();
+    hideSub.remove();
+  };
+}, []);
+```
+
+Use `KeyboardAvoidingView` / `KeyboardAwareScrollView` for the layout problem, and reach for `Keyboard` only when you need the open/closed state itself.
+
+* * *
+
+## 3\. NetInfo — Detect Online/Offline State
+
+`NetInfo` tells you whether the device currently has an internet connection, and what type (wifi, cellular, none).
+
+**Why it matters:** Mobile users lose connection constantly — elevators, subways, rural areas. Apps that silently fail with no explanation feel broken.
+
+Think about a note-taking or banking app. If the connection drops mid-session, show a small red banner: *"No internet connection — changes will sync once you're back online."* This alone makes an app feel far more trustworthy.
+
+This one needs a tiny install first:
+
+```bash
+npm install @react-native-community/netinfo
+```
+
+```typescript
+import NetInfo from '@react-native-community/netinfo';
+import { useEffect, useState } from 'react';
+
+const [isConnected, setIsConnected] = useState(true);
+
+useEffect(() => {
+  const unsubscribe = NetInfo.addEventListener((state) => {
+    setIsConnected(state.isConnected ?? false);
+  });
+
+  return () => unsubscribe();
+}, []);
+
+// Somewhere in your JSX:
+{!isConnected && <OfflineBanner />}
+```
+
+* * *
+
+## 4\. InteractionManager — Don't Let Heavy Work Freeze Your Animations
+
+`InteractionManager` delays a piece of code until all running animations and transitions have finished, so it doesn't cause janky, stuttering frames.
+
+**Why it matters:** React Native runs everything on one JavaScript thread by default. If you run a big calculation or a large list render *while* a screen transition animation is happening, the animation will visibly stutter.
+
+You navigate to a "Reports" screen that needs to process a big array of transactions and render a chart. If you do that immediately, the screen slide-in animation will look choppy. Instead, let the animation finish first, then do the heavy work.
+
+```typescript
+import { InteractionManager } from 'react-native';
+import { useEffect, useState } from 'react';
+
+useEffect(() => {
+  const task = InteractionManager.runAfterInteractions(() => {
+    // Heavy work: processing data, rendering big charts, etc.
+    processTransactions();
+  });
+
+  return () => task.cancel();
+}, []);
+```
+
+Think of it as saying: *"Let the pretty animation finish first, then do the boring heavy lifting."*
+
+* * *
+
+## 5\. BackHandler — Control the Android Back Button
+
+`BackHandler` lets you intercept the hardware/software back button on Android devices (iOS doesn't have this — it uses swipe gestures instead).
+
+**Why it matters:** By default, pressing back just goes to the previous screen or closes the app. Sometimes that's not what you want.
+
+Imagine the user is filling out a multi-step form (like a checkout flow) and presses back. Instead of losing their progress instantly, you want to show a confirmation dialog: *"Are you sure you want to leave? Your progress will be lost."*
+
+```typescript
+import { BackHandler } from 'react-native';
+import { useEffect } from 'react';
+
+useEffect(() => {
+  const onBackPress = () => {
+    Alert.alert('Wait!', 'Your progress will be lost. Leave anyway?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Leave', onPress: () => BackHandler.exitApp() },
+    ]);
+    return true; // true = we handled it, don't do the default action
+  };
+
+  const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+  return () => subscription.remove();
+}, []);
+```
+
+**Another classic use**: closing a modal or bottom sheet with the back button instead of navigating away from the whole screen.
+
+* * *
+
+## 6\. Vibration — Simple Haptic Feedback, No Library Needed
+
+`Vibration` triggers the device's vibration motor — no external package required.
+
+**Why it matters:** Small haptic touches make an app feel physical and responsive, and it's a one-line API.
+
+Think about a to-do app where checking off a task gives a tiny buzz, or a game where the player takes damage, and the phone vibrates to reinforce the hit.
+
+```typescript
+import { Vibration } from 'react-native';
+
+// A short buzz
+Vibration.vibrate(100); // duration in milliseconds
+
+// A pattern: wait, vibrate, wait, vibrate...
+Vibration.vibrate([0, 200, 100, 200]);
+```
+
+Note: for really polished haptic feedback (like the little "tap" feel on iOS buttons), many production apps eventually move to `expo-haptics` or `react-native-haptic-feedback`, but `Vibration` is a great zero-dependency starting point.
+
+* * *
+
+## 7\. Dimensions + useWindowDimensions — Responsive Layouts That Update on Rotation
+
+`useWindowDimensions` gives you the current screen width and height, and automatically re-renders your component when the screen size changes — like on device rotation or split-screen mode. It's the modern hook-based alternative to the older, static `Dimensions.get('window')`.
+
+**Why it matters:** Hardcoding pixel sizes breaks on different phones and tablets. And if you only check dimensions once, your layout won't update when the user rotates their phone.
+
+Imagine a photo gallery app that shows 2 columns of images in portrait mode but 4 columns in landscape mode, adjusting automatically without a reload.
+
+```typescript
+import { useWindowDimensions } from 'react-native';
+
+function PhotoGallery() {
+  const { width, height } = useWindowDimensions();
+  const numColumns = width > 600 ? 4 : 2;
+
+  return <FlatList data={photos} numColumns={numColumns} /* ... */ />;
+}
+```
+
+Use `useWindowDimensions` (the hook) instead of the static `Dimensions.get('window')` whenever you want your UI to react automatically to size changes.
+
+* * *
+
+## 8\. PixelRatio — Crisp Borders and Images on Every Screen
+
+`PixelRatio` tells you the pixel density of the device screen, letting you convert "design pixels" (dp) into actual physical pixels.
+
