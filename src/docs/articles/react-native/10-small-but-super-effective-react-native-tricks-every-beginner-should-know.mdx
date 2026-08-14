@@ -220,3 +220,117 @@ Use `useWindowDimensions` (the hook) instead of the static `Dimensions.get('wind
 
 `PixelRatio` tells you the pixel density of the device screen, letting you convert "design pixels" (dp) into actual physical pixels.
 
+**Why it matters:** A "1 pixel" border can look perfectly thin on one phone and look thick and blurry on another, because screens have different pixel densities. PixelRatio helps you draw genuinely hairline borders and pick the sharpest image size.
+
+You want a clean 1-physical-pixel divider line between list items — not the slightly-too-thick default line that appears on high-density screens.
+
+```typescript
+import { PixelRatio, StyleSheet } from 'react-native';
+
+const hairline = 1 / PixelRatio.get();
+
+const styles = StyleSheet.create({
+  divider: {
+    height: hairline,
+    backgroundColor: '#ccc',
+  },
+});
+```
+
+It's also used behind the scenes when picking @2x / @3x image assets so icons and photos look sharp instead of blurry on high-density phones.
+
+* * *
+
+## 9\. Platform.select — Cleaner Platform-Specific Code
+
+`Platform.select` lets you define different values (or even different components) for iOS and Android in one clean object, instead of scattering `Platform.OS === 'ios'` checks everywhere.
+
+**Why it matters:** iOS and Android have different design conventions — different font sizes, shadow styles, header heights, etc. Platform.select keeps that logic readable.
+
+Your app's header title needs to be a slightly different font size on iOS versus Android to match each platform's native feel, and the shadow style needs to differ too since Android uses `elevation` while iOS uses `shadowOffset`.
+
+```typescript
+import { Platform, StyleSheet } from 'react-native';
+
+const styles = StyleSheet.create({
+  headerTitle: {
+    fontSize: Platform.select({ ios: 17, android: 20 }),
+  },
+  card: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+});
+```
+
+Compare that to a pile of `if (Platform.OS === 'ios') { ... } else { ... }` blocks scattered across your file — Platform.select reads much more clearly.
+
+* * *
+
+## 10\. AccessibilityInfo — Build Apps That Work for Everyone
+
+`AccessibilityInfo` lets you detect whether the user currently has a screen reader (like VoiceOver on iOS or TalkBack on Android) turned on, along with other accessibility settings like reduced motion.
+
+**Why it matters:** Accessibility is often skipped by beginners, but it's genuinely easy to add small touches, and it matters — some of your users may be blind, low-vision, or sensitive to motion.
+
+Your app has a flashy parallax animation on the home screen. For a user with a screen reader enabled (who's navigating by touch and sound, not sight) or a user who has "reduce motion" turned on, that animation is at best pointless and at worst nauseating. Detect it and simplify the UI for them.
+
+```typescript
+import { AccessibilityInfo } from 'react-native';
+import { useEffect, useState } from 'react';
+
+const [screenReaderEnabled, setScreenReaderEnabled] = useState(false);
+
+useEffect(() => {
+  AccessibilityInfo.isScreenReaderEnabled().then(setScreenReaderEnabled);
+
+  const subscription = AccessibilityInfo.addEventListener(
+    'screenReaderChanged',
+    setScreenReaderEnabled
+  );
+
+  return () => subscription.remove();
+}, []);
+
+// Later:
+{!screenReaderEnabled && <FancyParallaxAnimation />}
+```
+
+* * *
+
+## Wrapping Up
+
+None of these APIs are flashy on their own — you won't see them advertised as "the next big React Native feature." But together, they're the difference between an app that *works* and an app that *feels* thoughtfully built:
+
+*   Knowing when the app comes back to life (`AppState`)
+    
+*   Not letting the keyboard ruin your layout (`KeyboardAvoidingView`)
+    
+*   Telling users when they've lost internet (`NetInfo`)
+    
+*   Keeping animations buttery smooth (`InteractionManager`)
+    
+*   Respecting the Android back button (`BackHandler`)
+    
+*   Adding a satisfying little buzz (`Vibration`)
+    
+*   Adapting instantly to screen size and rotation (`Dimensions` / `useWindowDimensions`)
+    
+*   Drawing genuinely crisp lines and images (`PixelRatio`)
+    
+*   Writing clean platform-specific code (`Platform.select`)
+    
+*   Making sure your app works for people using a screen reader (`AccessibilityInfo`)
+    
+
+Pick one you've never used before and try it in your current project this week. Small APIs, big polish.
+
+If you found this useful, drop a comment with your own favorite "hidden gem" React Native API — there are plenty more where these came from.
