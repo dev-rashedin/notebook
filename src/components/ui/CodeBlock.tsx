@@ -38,6 +38,8 @@ export default function CodeBlock({ code, language = "bash" }: CodeBlockProps) {
           "prisma",
           "dotenv",
           "mdx",
+          'sql',
+          'graphql',
         ],
       });
 

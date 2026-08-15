@@ -1,0 +1,205 @@
+# Transaction Architecture in Aivinn: Normal, Recurring, and AI-Driven
+
+## Table of Contents
+1. [Part 1 — Normal Transactions: Schema to UI](#part-1--normal-transactions-schema-to-ui)
+2. [Part 2 — How a Transaction Impacts the Rest of the App](#part-2--how-a-transaction-impacts-the-rest-of-the-app)
+3. [Part 3 — Recurring Transactions: Schema to Cron](#part-3--recurring-transactions-schema-to-cron)
+4. [Part 4 — Designing the AI Tools](#part-4--designing-the-ai-tools)
+
+---
+
+## Part 1 — Normal Transactions: Schema to UI
+
+### Schema
+
+A transaction is wallet-scoped, not user-scoped — Aivinn wallets can be shared by multiple people, so every calculation groups by `wallet_id`. `user_id` is stored purely as audit metadata (who logged it), never used to filter or sum anything:
+
+```prisma
+model transactions {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wallet_id   String           @db.Uuid
+  user_id     String
+  type        transaction_type
+  category_id String           @db.Uuid
+  icon_name   String
+  amount      Decimal          @db.Decimal(12, 2)
+  date        DateTime         @default(now()) @db.Timestamptz(6)
+  note        String?
+  created_at  DateTime         @default(now()) @db.Timestamp(6)
+  updated_at  DateTime         @default(now()) @db.Timestamp(6)
+  categories  categories       @relation(fields: [category_id], references: [id])
+  users       users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  wallets     wallets          @relation(fields: [wallet_id], references: [id], onDelete: Cascade)
+
+  @@index([wallet_id, date, type, category_id], map: "idx_transactions_wallet_date_type_category")
+  @@index([wallet_id, date, amount, type], map: "idx_transactions_summary")
+}
+```
+
+The two composite indexes at the bottom aren't incidental — they mirror the exact `WHERE` + `GROUP BY` shape used by the two heaviest queries (list-by-date-range, and the raw-SQL summary aggregation below), rather than indexing columns individually and hoping the query planner combines them well.
+
+### CRUD
+
+**Route → Controller → Service**, the pattern used consistently across the app:
+
+```typescript
+transactionsRouter.get('/:walletId', transactionsController.getTransactions);
+transactionsRouter.get('/:walletId/summary', transactionsController.getTransactionsSummary);
+transactionsRouter.get('/:walletId/:transactionId', transactionsController.getSingleTransaction);
+transactionsRouter.post('/:walletId', transactionsController.createTransaction);
+transactionsRouter.put('/:walletId/:transactionId', transactionsController.updateTransaction);
+transactionsRouter.delete('/:walletId/:transactionId', transactionsController.deleteTransaction);
+```
+
+Every controller action calls `checkWalletAccess(userId, walletId)` before touching data — access control lives at the controller boundary, not scattered through service logic.
+
+**Create** applies the sign convention once, at the write boundary, so nothing downstream has to re-derive it:
+
+```typescript
+const formattedAmount =
+  transactionData.type === 'EXPENSE'
+    ? -Math.abs(transactionData.amount)
+    : Math.abs(transactionData.amount);
+```
+
+**Read (list)** joins against an in-memory category cache rather than a live SQL join per row — `getCategoryMap()` is fetched once, in parallel with the DB query, and mapped onto results afterward:
+
+```typescript
+const [categoryMap, transactionsRaw] = await Promise.all([
+  getCategoryMap(),
+  prisma.transactions.findMany({
+    where: { wallet_id: walletId, date: { gte: start, lte: end } },
+    orderBy: [{ date: 'desc' }, { created_at: 'desc' }],
+    take: limit + 1,
+    ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+  }),
+]);
+```
+
+Pagination is cursor-based (`take: limit + 1`, then popping the extra row to detect `nextCursor`) rather than offset-based, avoiding the classic "page 50 shifts because someone deleted a row on page 3" problem.
+
+**Read (summary)** uses raw SQL rather than Prisma's query builder, since a single `SUM(CASE WHEN ...)` aggregation is both clearer and faster than pulling every row into Node and reducing client-side:
+
+```typescript
+const summaryRaw = await prisma.$queryRaw<{ balance: number; income: number; expense: number }[]>`
+  SELECT
+    COALESCE(SUM(amount), 0) AS balance,
+    COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+    COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
+  FROM transactions
+  WHERE wallet_id = ${walletId} AND date >= ${start} AND date <= ${end};
+`;
+```
+
+**Update and delete** both invalidate the wallet's cached context (`clearUserContext`) in a `finally` block, so a stale cache never outlives a mutation regardless of whether the mutation itself succeeded or the side-effects afterward failed.
+
+### UI Display
+
+The transaction modal is a single component serving both `ADD` and `UPDATE` modes, switched by a `mode` prop rather than two separate components — category picker, amount input, and date picker are shared, with mode-specific behavior (prefill, "hasChanged" gating on the submit button) branching inside:
+
+```typescriptreact
+export const TransactionModal = ({ mode = "ADD", transactionForm, setTransactionForm, ... }) => {
+  const modalVisibility =
+    mode === "ADD" ? modalState.addModalVisible : modalState.updateModalVisible;
+  // shared form fields...
+};
+```
+
+The list screen (`transactions.tsx`) renders a `FlatList` fed by an infinite-scroll hook (`useFetchTransactionsApi`, built on `useInfiniteQuery`), flattening paginated pages into one array:
+
+```typescript
+const transactions = useMemo(
+  () => data?.pages?.flatMap((page) => page.transactions) ?? [],
+  [data?.pages],
+);
+```
+
+The calendar screen (`react-native-calendars`) renders a custom `dayComponent`, checking a `Set` of transaction dates (built once via `useMemo` from the fetched date list) against each rendered day — an O(1) lookup per day cell rather than filtering the full transaction array 30+ times per month render.
+
+---
+
+## Part 2 — How a Transaction Impacts the Rest of the App
+
+A `createTransaction` call doesn't just insert a row — it fires four downstream recalculations. Each is described only briefly here, since they're systems with their own separate design history:
+
+- **Wellness score** — a composite 60–100 number built from five weighted components (Habit, Budget, Income Stability, Goal, Challenge). A `TRANSACTION` trigger recomputes four of the five.
+- **Challenges** — behavioral challenge progress (e.g. "avoid dining out this week") evaluated against the specific category, amount, and type of the transaction just logged.
+- **Budget threshold checks** — compares new cumulative spend against the active budget for the current payday-based cycle, can fire a warning notification on crossing a threshold.
+- **Goals** — specifically `BUDGET_LIMIT`-type goals, re-evaluated against the category's spend for the current cycle.
+
+### The performance decision: `Promise.all`, not sequential awaits
+
+All four fire concurrently, and — just as importantly — **the transaction write itself doesn't wait for any of them**:
+
+```typescript
+const [transaction, categoryMap, wallet] = await Promise.all([
+  prisma.transactions.create({ data: { /* ... */ } }),
+  getCategoryMap(),
+  prisma.wallets.findUnique({ where: { id: walletId }, select: { payday: true } }),
+]);
+
+// Response already has everything it needs to return here.
+// Side effects fire after, without being awaited by the caller:
+Promise.all([
+  wellnessScoreService.recalculateWellnessScore(userId, walletId, 'TRANSACTION'),
+  evaluateChallengeIfNeeded(walletId, categoryId, category.name, formattedAmount, type),
+  budgetsService.checkBudgetThresholds(userId, walletId, wallet.payday, formattedAmount),
+  goalsService.checkBudgetLimitGoals(userId, walletId, categoryId, wallet.payday),
+]).catch(error => console.error('Post-transaction side-effect failed:', error));
+
+return transaction;
+```
+
+Two separate `Promise.all` calls doing two different jobs:
+
+1. **The first** — creating the row, fetching the category map, and fetching wallet payday — genuinely need to happen before the function can return anything meaningful, so they're awaited together rather than three sequential round-trips.
+2. **The second** — the four side effects — are deliberately *not* awaited by the caller at all. They're fired, wrapped in their own `Promise.all().catch()`, and left to resolve independently. The HTTP response returns to the user the moment the transaction itself is written, without waiting for wellness score math or challenge evaluation to finish.
+
+This matters for perceived speed: a user tapping "Add Transaction" sees the modal close and the list update immediately, while four unrelated recalculations finish silently a few hundred milliseconds later in the background. Running them in `Promise.all` rather than sequential `await`s also means the total side-effect time is bounded by the *slowest* of the four, not the *sum* of all four — meaningful when each involves its own DB round-trip.
+
+The one deliberate constraint on this pattern: every side-effect promise is guarded independently, wrapped in a single outer `.catch()` that only logs — a failure in, say, challenge evaluation, never surfaces as an error to the user or rolls back the transaction that already succeeded. The transaction write is the source of truth; everything downstream is best-effort.
+
+---
+
+## Part 3 — Recurring Transactions: Schema to Cron
+
+### Schema
+
+Recurring and one-time future transactions share one table, distinguished by a boolean rather than living in separate schemas:
+
+```sql
+CREATE TABLE scheduled_transactions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    wallet_id           UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type                transaction_type NOT NULL,
+    category_id         UUID NOT NULL REFERENCES categories(id) ON DELETE NO ACTION,
+    icon_name           TEXT NOT NULL,
+    amount              DECIMAL(12,2) NOT NULL,
+    note                TEXT,
+    is_recurring        BOOLEAN NOT NULL DEFAULT true,
+    recurrence_day      INTEGER,                    -- nullable — only meaningful if is_recurring
+    next_due_date       TIMESTAMPTZ NOT NULL,
+    last_materialized_at TIMESTAMPTZ,
+    is_active           BOOLEAN NOT NULL DEFAULT true,
+    source              TEXT NOT NULL DEFAULT 'MANUAL',  -- MANUAL | AI_CHAT
+    created_at          TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMP NOT NULL DEFAULT now()
+);
+
+ALTER TABLE transactions
+    ADD COLUMN scheduled_transaction_id UUID REFERENCES scheduled_transactions(id) ON DELETE SET NULL;
+```
+
+Crucially, this table only ever stores **one row per rule** — the next occurrence — never one row per future month. `scheduled_transaction_id` on `transactions` is nullable with `ON DELETE SET NULL`: deleting a rule must never delete the real historical transactions it already generated, only sever the link.
+
+### Why one table, and why one row
+
+The feature started as "recurring transactions only." It broadened after a design review surfaced a real gap: if only *recurring* future transactions were held back from appearing as real transactions, a user could fabricate a large one-time future expense, watch safe-to-spend drop, then delete it before it was ever due — manipulating the number with no trace. The fix was to unify the rule: **any future-dated transaction is held, recurring or not.** A one-time future transaction became, structurally, just a recurring rule that never reschedules after firing once.
+
+Storing only the next occurrence (rather than pre-generating rows for every future month) mirrors how calendar apps handle recurring events generally: compute what's needed for whatever range is being viewed, on demand, rather than materializing a rule's entire future in advance.
+
+### CRUD
+
+The `scheduled_transactions` table has **no standalone HTTP routes**. Every operation is invoked internally by `transactionsService`, which decides — based on a transaction's date — whether an action belongs to the `transactions` table or the `scheduled_transactions` table:
+

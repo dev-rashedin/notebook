@@ -58,7 +58,7 @@ export default function DisplayHeadings({ clientHeadings }: { clientHeadings: He
   if (!clientHeadings?.length) return null;
 
   return (
-    <aside className="hidden xl:block fixed right-[max(calc(50%-45rem),2rem)]   top-48 w-64">
+    <aside className="hidden xl:block fixed right-[max(calc(50%-45rem),2rem)]   top-36 w-80">
       <div className="relative pl-6">
         {/* Background for the scrollbar */}
         <div className="absolute left-0 top-0 w-[2px] h-full bg-muted" />
@@ -73,8 +73,8 @@ export default function DisplayHeadings({ clientHeadings }: { clientHeadings: He
         />
 
         {/* Headings list */}
-        <nav ref={sidebarRef} className="flex flex-col gap-3 max-h-[70vh] overflow-auto">
-          <p className="font-semibold">On this page</p>
+        <nav ref={sidebarRef} className="flex flex-col gap-1.5 max-h-[85vh] overflow-auto">
+          <p className="font-semibold text-brand">On this page</p>
           {clientHeadings.map((h, idx) =>
             idx === 0 ? null : (
               <a
@@ -86,7 +86,7 @@ export default function DisplayHeadings({ clientHeadings }: { clientHeadings: He
                   el?.scrollIntoView({ block: 'start' });
                   setActiveId(h.id);
                 }}
-                className={`block truncate transition-colors ${
+                className={`block truncate transition-colors text-[14px] ${
                   activeId === h.id ? 'text-muted-highlights' : 'text-muted-foreground'
                 } ${h.level === 3 ? 'pl-6' : ''}`}
               >
