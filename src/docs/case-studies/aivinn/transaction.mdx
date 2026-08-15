@@ -1,0 +1,380 @@
+# How I Designed Transactions in Aivinn — Normal, Recurring, Manual, and AI-Driven
+
+## Table of Contents
+1. [Background](#background)
+2. [Part One: The Foundation — Normal Transactions](#part-one-the-foundation--normal-transactions)
+3. [How a Transaction Ripples Outward](#how-a-transaction-ripples-outward)
+4. [Part Two: The Scope Evolution — From "Recurring" to "Hold All Future Transactions"](#part-two-the-scope-evolution--from-recurring-to-hold-all-future-transactions)
+5. [System Design Decisions](#system-design-decisions)
+6. [Database Schema](#database-schema)
+7. [The Core Mechanism: `resolveScheduledDates`](#the-core-mechanism-resolvescheduleddates)
+8. [Manual Entry Flow](#manual-entry-flow)
+9. [Editing and Deleting Pending Items](#editing-and-deleting-pending-items)
+10. [Safe-to-Spend Reservation](#safe-to-spend-reservation)
+11. [Calendar Projection: Displaying Recurring Items Without Storing Them](#calendar-projection-displaying-recurring-items-without-storing-them)
+12. [The Materialization Cron Job](#the-materialization-cron-job)
+13. [Push Notifications and the Invalidation Problem](#push-notifications-and-the-invalidation-problem)
+14. [AI Chat Tool Integration](#ai-chat-tool-integration)
+15. [The Confirmation Problem: Update and Delete via Chat](#the-confirmation-problem-update-and-delete-via-chat)
+16. [Testing and Edge Cases](#testing-and-edge-cases)
+17. [Known Trade-offs & Lessons Learned](#known-trade-offs--lessons-learned)
+
+---
+
+## Background
+
+A transaction is the smallest, most frequent unit of data in Aivinn — every wellness score, every budget number, every challenge and goal ultimately traces back to rows in one table. This document covers the system end to end: the foundational CRUD layer transactions were built on, how a single transaction ripples outward into the rest of the app, and — the bulk of this piece — the scheduled/recurring transaction system layered on top of it, covering both the manual UI and the AI chat tool that can create, correct, and delete transactions on a user's behalf.
+
+---
+
+## Part One: The Foundation — Normal Transactions
+
+Before any scheduling concept existed, a transaction was a simple, immediately-real thing: an amount, a type (`INCOME`/`EXPENSE`), a category, a date, tied to a wallet. The route/controller/service structure follows the same pattern used across the app's other modules:
+
+```typescript
+// transactions.route.ts
+transactionsRouter.get('/:walletId/all-time', transactionsController.getAllTimeTransactions);
+transactionsRouter.get('/:walletId', transactionsController.getTransactions);
+transactionsRouter.get('/:walletId/summary', transactionsController.getTransactionsSummary);
+transactionsRouter.get('/:walletId/:transactionId', transactionsController.getSingleTransaction);
+transactionsRouter.post('/:walletId', transactionsController.createTransaction);
+transactionsRouter.put('/:walletId/:transactionId', transactionsController.updateTransaction);
+transactionsRouter.delete('/:walletId/:transactionId', transactionsController.deleteTransaction);
+```
+
+Every route checks wallet access before touching data — Aivinn is wallet-scoped throughout, not user-scoped, since a wallet can be shared by multiple people. `user_id` is stored on every transaction, but purely as audit metadata (who logged it); every actual query, sum, and calculation filters by `wallet_id` alone. This distinction mattered enough to be enforced as a standing rule after an earlier bug where shared-wallet calculations leaked data along user boundaries instead of wallet boundaries.
+
+Creation applies a sign convention at the write boundary, so nothing downstream has to re-derive it:
+
+```typescript
+const formattedAmount =
+  transactionData.type === 'EXPENSE'
+    ? -Math.abs(transactionData.amount)
+    : Math.abs(transactionData.amount);
+```
+
+Every list query (`fetchTransactions`) joins against an in-memory category cache (`getCategoryMap`) rather than a live join per row, and every write kicks off cache invalidation (`clearUserContext`) so a stale cached context doesn't linger after a mutation. These weren't scheduling-related decisions — they predate this feature entirely — but they're the substrate everything else in this document sits on.
+
+---
+
+## How a Transaction Ripples Outward
+
+A single `createTransaction` call doesn't just insert a row — it fires a set of downstream recalculations, all non-blocking and run concurrently so the write itself isn't held up waiting on them:
+
+```typescript
+Promise.all([
+  wellnessScoreService.recalculateWellnessScore(userId, walletId, 'TRANSACTION'),
+  evaluateChallengeIfNeeded(walletId, categoryId, category.name, formattedAmount, type),
+  budgetsService.checkBudgetThresholds(userId, walletId, wallet.payday, formattedAmount),
+  goalsService.checkBudgetLimitGoals(userId, walletId, categoryId, wallet.payday),
+]).catch(error => console.error('Post-transaction side-effect failed:', error));
+```
+
+At a high level, each of these does the following — briefly, since they're systems in their own right with their own design history:
+
+- **Wellness score** — a composite 60–100 number summarizing financial health, made of five independently-weighted components (Habit, Budget, Income Stability, Goal, Challenge). A `TRANSACTION` trigger recomputes four of the five (everything except Challenge, which only reacts to challenge-specific events). The score deliberately uses discrete buckets rather than continuous scaling, and treats "no data yet" as best-case rather than neutral — both conscious trade-offs favoring simplicity and not penalizing incomplete onboarding, at the cost of the score sometimes feeling less responsive than a fully continuous model would.
+- **Challenges** — behavioral challenges (e.g., "avoid dining out this week") get their progress evaluated against the specifics of the transaction just logged — its category, amount, and type — hooked directly into the transaction write path rather than into the AI tool layer, so progress updates regardless of how a transaction was created.
+- **Budget threshold checks** — compares the new cumulative spend against the wallet's active budget for the current payday-based cycle, and can trigger a warning notification if a threshold is crossed.
+- **Goals** — specifically `BUDGET_LIMIT`-type goals (as opposed to `SAVING_GOAL`-type), which are tied to a category staying under a target amount within the current cycle; a new expense can push a goal from on-track to over, or vice versa on an update/delete.
+
+The important structural point for this document: **all four of these fire from the same `createTransaction`/`updateTransaction`/`deleteTransaction` functions**, regardless of whether the transaction came from the manual modal, the AI chat tool, or (as covered later) the scheduling cron job. Centralizing transaction creation into one service, rather than letting each entry point write directly to the database, is what makes this consistency possible — every one of these ripple effects fires uniformly no matter the source.
+
+---
+
+## Part Two: The Scope Evolution — From "Recurring" to "Hold All Future Transactions"
+
+The feature that prompted the rest of this document started narrowly: let users mark a transaction as recurring (rent, salary, subscriptions) so it repeats monthly, and reflect upcoming bills in safe-to-spend before they're actually paid. The CEO's clarifying voice note sharpened this:
+
+> "If there's a bill tomorrow, from now on it will just be deducted from safe to spend and not show in a transaction up until the date it is deducted... this resets on every budget period, same with everything else."
+
+The first implementation treated this as recurring-only: a future recurring transaction would be held; a future one-time transaction would log immediately. That gap created a real vulnerability — a user could mark a large expense "recurring," dated weeks out, watch safe-to-spend drop immediately, then delete or uncheck it before it was ever due, manipulating the number with zero trace, since nothing had actually been logged.
+
+The resolution was to stop special-casing recurring vs. one-time and unify the rule: **any transaction dated in the future is held, no matter its source or whether it repeats.** This closed the loophole — a fabricated future transaction still has to be *deleted*, a visible, undoable action — and simplified the mental model to one rule instead of two.
+
+---
+
+## System Design Decisions
+
+### Decision 1: One generalized table, not two
+
+Rather than a `recurring_transactions` table plus a separate mechanism for one-time future transactions, everything lives in a single `scheduled_transactions` table with an `is_recurring` boolean. A one-time future transaction is simply a scheduled transaction that never reschedules after materializing.
+
+**Why:** the two concepts share almost everything — category, amount, due date, materialization event, grayed-out UI treatment. The only real difference is what happens *after* materialization: reschedule, or deactivate. Splitting them into two tables would have meant duplicating the projection logic, the safe-to-spend query, and the transactions-list merge query for no real benefit.
+
+### Decision 2: Read-time projection instead of pre-generated rows
+
+A recurring rule stores exactly **one** row — its next due date. It does not pre-generate a row for every future month. Calendar dots, list previews, and safe-to-spend all compute future occurrences on the fly, walking forward from the stored date up to whatever range is being queried.
+
+**Why:** pre-generating rows for a rule that repeats indefinitely means either capping it arbitrarily or generating rows forever, neither clean. Read-time projection mirrors how Google Calendar itself handles recurring events — compute what's visible, not what might ever exist.
+
+### Decision 3: The one real row is the only thing that's ever editable by date
+
+Because projected future dots (month 2, 3, 4 out) are computed, not stored, tapping "the September 15th one" and "the November 15th one" both resolve to the *same* underlying database row. Early in the design, this posed a real risk: if a far-future projected dot's date pre-filled an edit form as though directly editable, saving without real intent to reschedule could silently overwrite the true next occurrence, causing whole months to vanish.
+
+The resolution: whenever a pending item's detail view opens, it always fetches the *real* record fresh, never trusting whatever date was used to compute the tapped dot. Editing the date on that real record then correctly reschedules the whole series going forward — the intended behavior once made explicit, rather than something to guard against.
+
+### Decision 4: Asymmetric treatment of income vs. expense in safe-to-spend
+
+Only pending **expenses** reduce safe-to-spend ahead of time. Pending income is never pre-reserved — it only counts once actually received and logged, per the CEO: *"I would only do income when it is actually received, so it does not let you spend money you don't have yet."* This is deliberately conservative — safe-to-spend can only ever be pessimistic about the future, never optimistic.
+
+### Decision 5: "Saved" stays untouched by reservations
+
+`getActiveBudget` returns two related but distinct numbers: `reserved` (used only for the safe-to-spend circular progress) and `remaining` (used for the "Saved" line, `amount - spent`, no reservation subtracted). Conflating them would make "Saved" drop the moment a bill was scheduled, even though nothing had actually been spent — explicitly rejected: *"it will only affect when the amount is really spent and deducted."*
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE scheduled_transactions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    wallet_id           UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type                transaction_type NOT NULL,
+    category_id         UUID NOT NULL REFERENCES categories(id) ON DELETE NO ACTION,
+    icon_name           TEXT NOT NULL,
+    amount              DECIMAL(12,2) NOT NULL,
+    note                TEXT,
+    is_recurring        BOOLEAN NOT NULL DEFAULT true,
+    recurrence_day      INTEGER,                    -- nullable: only meaningful if is_recurring
+    next_due_date       TIMESTAMPTZ NOT NULL,
+    last_materialized_at TIMESTAMPTZ,
+    is_active           BOOLEAN NOT NULL DEFAULT true,
+    source              TEXT NOT NULL DEFAULT 'MANUAL',  -- MANUAL | AI_CHAT
+    created_at          TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMP NOT NULL DEFAULT now()
+);
+
+ALTER TABLE transactions
+    ADD COLUMN scheduled_transaction_id UUID REFERENCES scheduled_transactions(id) ON DELETE SET NULL;
+```
+
+`user_id` follows the same audit-only convention as the base `transactions` table. `scheduled_transaction_id` is nullable and `ON DELETE SET NULL` — deleting a recurring rule should never delete the historical transactions it already generated, only orphan the link. `next_due_date` is the single source of truth for a rule's *real* upcoming occurrence; everything past it is computed, never stored.
+
+---
+
+## The Core Mechanism: `resolveScheduledDates`
+
+Every entry point — manual modal, AI tool, cron — funnels through one function deciding whether an occurrence should log immediately or wait, and what the correct next due date is if recurring:
+
+```typescript
+const resolveScheduledDates = (inputDate: Date, isRecurring: boolean) => {
+  const today = dayjs.utc().startOf('day');
+  const occurrence = dayjs.utc(inputDate).startOf('day');
+  const shouldLogNow = occurrence.isSameOrBefore(today);
+
+  if (!isRecurring) {
+    return { shouldLogNow, nextDueDate: occurrence.toDate() };
+  }
+
+  let nextDueDate = occurrence.add(1, 'month');
+  while (nextDueDate.isSameOrBefore(today)) {
+    nextDueDate = nextDueDate.add(1, 'month');
+  }
+
+  return { shouldLogNow, nextDueDate: nextDueDate.toDate() };
+};
+```
+
+The roll-forward loop matters for backdated recurring entries: logging June's rent while it's August shouldn't make the system think July's rent is "due immediately." The loop walks forward past every already-elapsed month until landing on the first genuinely future date — skipped months (July, here) simply never get a transaction or reservation. Not backfilled, not flagged, just absent — an explicit trade-off, confirmed rather than assumed.
+
+dayjs's `.add(1, 'month')` correctly clamps rather than overflows for month-end dates — verified directly (`dayjs('2026-01-31').add(1, 'month')` → `2026-02-28`) before shipping, since an overflow bug here would silently drift any rule anchored to the 29th–31st forward by a few days, month after month.
+
+---
+
+## Manual Entry Flow
+
+### Creating
+
+`transactionsService.createTransaction` is the single entry point for all transaction creation, manual or AI-driven, branching on `resolveScheduledDates`:
+
+- **Future date** (regardless of `is_recurring`) → creates a `scheduled_transactions` row only. Nothing written to `transactions`. Response: `{ status: 'PENDING', scheduled_transaction: {...} }`.
+- **Today or past** → logs to `transactions` immediately, exactly like a normal transaction always has, then fires the full ripple of side effects described above. If `is_recurring`, it *also* creates the next `scheduled_transactions` row, stamped with `last_materialized_at` set to today so the current period's reservation query doesn't double-count it. Response: `{ status: 'LOGGED', transaction: {...} }`.
+
+The frontend exposes this as a checkbox — "Make this a recurring transaction" — placed near the existing date picker, since the already-selected date doubles as the recurrence anchor.
+
+### Editing — the logged-to-pending and pending-to-logged conversions
+
+**Logged transaction, date edited into the future:** the real `transactions` row is deleted and a new `scheduled_transactions` row created in its place, converting a real transaction back into pending. Otherwise a user could push a transaction's date forward while it stays visible/counted, silently breaking the "future = held" invariant.
+
+**Pending transaction, date edited into today or the past:** the reverse — the `scheduled_transactions` row is deleted, and `createTransaction` is called fresh, reusing the exact same creation path (and side-effect ripple) as a brand-new manual entry.
+
+```typescript
+if (!shouldLogNow) {
+  await prisma.transactions.delete({ where: { id: transactionId, wallet_id: walletId } });
+  const scheduledTransaction = await scheduledTransactionsService.createScheduledTransaction(/* ... */);
+  return { status: 'PENDING', scheduled_transaction: scheduledTransaction };
+}
+```
+
+```typescript
+if (shouldLogNow) {
+  await scheduledTransactionsService.deleteScheduledTransaction(walletId, scheduledTransactionId);
+  return transactionsService.createTransaction(userId, walletId, { /* ... */ });
+}
+```
+
+---
+
+## Editing and Deleting Pending Items
+
+Per-occurrence editing (Google Calendar's "just this event" vs. "this and following") was considered and deliberately not built — it would require an exceptions table for a use case that wasn't a confirmed need. The simpler model shipped instead: **editing or deleting any occurrence, however far projected, always operates on the one real underlying rule, and the change applies to every future occurrence.**
+
+The UI states this explicitly rather than hiding it: *"This is a recurring transaction. Editing or deleting it will affect every future occurrence, not just this one."* An important correction made to an earlier draft of this message: deleting a recurring rule does **not** affect past occurrences, since those already became independent `transactions` rows the moment they materialized — only future generation stops.
+
+---
+
+## Safe-to-Spend Reservation
+
+`getActiveBudget` queries pending scheduled transactions falling within the current payday-to-payday cycle (`computeCycle(payday, month, year)` — not a calendar month) and sums the expense side into a `reserved` figure, kept separate from `spent`:
+
+```typescript
+const reserved = pendingScheduled
+  .filter(s => s.type === 'EXPENSE')
+  .reduce((sum, s) => sum + Number(s.amount), 0);
+
+const remaining = Math.max(amount - spent, 0); // untouched by reservations — "Saved"
+```
+
+The frontend's safe-to-spend circular progress computes `budgetAmount - spent - reserved`; "Saved" stays `amount - spent` alone. The query for "which pending items fall in this period" is projection-aware, not a lookup against the single stored `next_due_date` — a recurring rule anchored to the 5th needs to surface as reserved for every future period it touches, not just its literal stored occurrence.
+
+---
+
+## Calendar Projection: Displaying Recurring Items Without Storing Them
+
+The calendar shows a dot on every date with activity — logged or pending — including recurring items projected arbitrarily far forward, without a database row per occurrence:
+
+```typescript
+for (const s of activeScheduled) {
+  if (!s.is_recurring) {
+    if (occ.isSameOrAfter(start) && occ.isSameOrBefore(end)) {
+      results.push({ ...s, occurrence_date: s.next_due_date });
+    }
+    continue;
+  }
+
+  let occurrence = dayjs.utc(s.next_due_date);
+  while (occurrence.isSameOrBefore(end)) {
+    if (occurrence.isSameOrAfter(start)) {
+      results.push({ ...s, occurrence_date: occurrence.toDate() });
+    }
+    occurrence = occurrence.add(1, 'month');
+  }
+}
+```
+
+The range is driven by the calendar UI — as the user swipes months (`react-native-calendars`' `onMonthChange`), the frontend re-requests with a new range end, and React Query refetches naturally. Nothing is computed further out than what's actually visible, mirroring the same lazy-computation principle used for the rule itself.
+
+---
+
+## The Materialization Cron Job
+
+A daily cron job is the only thing turning a pending scheduled transaction into a real one without user interaction:
+
+```typescript
+const dueScheduled = await scheduledTransactionsService.getDueScheduledTransactions(); // next_due_date <= today
+
+for (const scheduled of dueScheduled) {
+  await transactionsService.createTransaction(scheduled.user_id, scheduled.wallet_id, {
+    /* ...fields..., */
+    is_recurring: false, // deliberate — see below
+  });
+
+  if (scheduled.is_recurring) {
+    const { nextDueDate } = scheduledTransactionsService.resolveScheduledDates(scheduled.next_due_date, true);
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      next_due_date: nextDueDate,
+      last_materialized_at: scheduled.next_due_date,
+    });
+  } else {
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      is_active: false,
+    });
+  }
+
+  await sendPushNotification({ /* ... */ });
+}
+```
+
+`is_recurring: false` passed to `createTransaction` here is deliberate — `createTransaction`'s own recurring branch would otherwise spawn its *own* next scheduled row, duplicating the reschedule the cron job already performs explicitly right after. Because materialization routes through the same `createTransaction` function as manual entry, the full side-effect ripple (wellness score, challenges, budget thresholds, goals) fires identically whether a transaction was typed by hand or generated silently overnight.
+
+For testing without waiting on real calendar time, the job logic was separated from its `cron.schedule()` wrapper into its own exported function — allowing a due date to be manually backdated via SQL and the materialization logic invoked directly.
+
+---
+
+## Push Notifications and the Invalidation Problem
+
+Materialization fires a push notification carrying an `invalidateKeys` array (`transactions`, `allTimeTransactions`, `budget`) the frontend reads to refresh its React Query cache. This closes a gap found directly during testing: the backend correctly materializing a transaction is invisible to a user until something tells their already-open app to refetch, otherwise they'd see stale, still-pending data until a manual pull-to-refresh.
+
+The existing listener (`addNotificationReceivedListener`, firing while foregrounded) already read this field correctly — its effectiveness is bounded by the platform, since it can only fire while the app is actually running. A notification arriving while the app is fully closed still displays in the OS tray, but nothing refreshes silently in the background; the existing `AppState`-driven refetch-on-active is what catches up the moment the app is reopened, by any means.
+
+---
+
+## AI Chat Tool Integration
+
+The AI chat layer needed three tools, all funneling through the exact same `transactionsService` functions the manual modal uses, deliberately, so future-dated and recurring logic never needs a second implementation.
+
+### `create_transaction`
+
+Structurally the same tool used for normal transactions, with `is_recurring` and `source: 'AI_CHAT'` added. Its description carries the conversational logic driving a multi-turn flow, since there's no separate code-level state machine:
+
+- For a fixed category list (Salary, Rent, Utilities, Transportation, Insurance, Subscriptions), the model is instructed to ask *before* calling the tool whether the transaction should repeat monthly, and if so, to ask for a start date rather than silently defaulting to today.
+- The response flattens `transactionId` and `status` to the top level — a correction from an earlier version that buried the id under a key name varying by status (`data.transaction.id` vs `data.scheduled_transaction.id`). A model reasoning across turns needs an unambiguous, consistently-located value to hold onto; the inconsistent nesting was directly responsible for the model "forgetting" an id it needed one turn later.
+
+### `update_transaction` and `delete_transaction`
+
+Both operate under one hard constraint, chosen over building a search/lookup capability: **the agent may only act on a transaction it created itself, earlier in the same conversation**, using the exact `transactionId`/`status` its own prior call returned. A `find_transaction_tool` supporting natural-language lookup was considered and rejected for this iteration as meaningfully larger in scope, in exchange for a bounded, honestly-communicated limitation: the agent cannot help correct a transaction from a prior session, and says so plainly rather than pretending to search for something it has no way to find.
+
+---
+
+## The Confirmation Problem: Update and Delete via Chat
+
+Update executes directly once the agent has a valid id and a clear correction ("no I meant tomorrow"). Delete is treated more conservatively, per explicit direction:
+
+> "The system must get a confirmation before deleting anything, a clear yes/yup. Otherwise it can create danger."
+
+The tool description encodes this as an explicit, ordered protocol:
+
+```
+1. Restate which transaction you're about to delete (amount, category, date).
+2. Ask the user to explicitly confirm — e.g. "Should I delete this €50 Transportation entry from today? (yes/no)"
+3. Only call this tool if the user's next message is an unambiguous "yes".
+4. If unclear or hesitant — do NOT call this tool.
+5. Never call this tool in the same turn you proposed the deletion.
+```
+
+Worth naming honestly: this is a prompt-level guardrail, not a code-level one — the tool function has no way to verify a confirmation actually happened. The safety rests entirely on the model reliably following instructed behavior, which is why it was tested explicitly as its own scenario. For recurring items, the confirmation message also states plainly that deleting cancels every future occurrence, mirroring the same caveat shown in the manual UI.
+
+---
+
+## Testing and Edge Cases
+
+Testing relied on directly manipulating `next_due_date` via SQL and triggering the extracted cron function on demand:
+
+```sql
+UPDATE scheduled_transactions
+SET next_due_date = next_due_date - INTERVAL '1 day'
+WHERE id = '<test-row-id>';
+```
+
+Confirmed through this method: recurring materialization correctly rescheduling forward; one-time materialization correctly deactivating; safe-to-spend reservation correctly excluding an item once materialized within the same period, avoiding a double count; and month-end clamp behavior of the underlying date library, checked directly rather than assumed.
+
+Deliberately deferred past initial release, as lower-risk than a visible date-drift bug: exact boundary behavior when a due date falls precisely on a budget period's start or end, and whether a recurring rule created by one member of a shared wallet correctly reserves and materializes for every other member. Both are backend correctness questions rather than user-facing breakage risks, reasonable to monitor post-launch rather than block a real deadline on.
+
+---
+
+## Known Trade-offs & Lessons Learned
+
+1. **Centralizing transaction creation into one service function is what made every downstream ripple effect (wellness score, challenges, goals, budget thresholds) work consistently regardless of source.** Manual entry, AI chat, and the cron job all call the same `createTransaction` — a design decision made long before scheduling existed, but one that made the entire scheduling feature meaningfully simpler to build correctly.
+
+2. **The loophole that reshaped the whole design was found by asking "why," not by testing.** The jump from "hold recurring future transactions" to "hold *all* future transactions" came from questioning what a user could exploit, not from a bug report.
+
+3. **Read-time projection is the right call whenever "infinite forward repetition" meets "needs to be queryable."** This pattern shows up three times independently (calendar dots, transaction list merging, safe-to-spend reservation) and was solved the same way each time once recognized.
+
+4. **A single row shared across every projected occurrence is powerful but has a sharp edge.** It's what makes "editing affects the whole series" simple to implement correctly — but a UI that naively pre-fills a *projected* date as directly editable can silently corrupt the one real record behind it.
+
+5. **Giving an AI tool the ability to correct its own prior actions requires the tool's own output to be legible to the model, not just correct.** The id-nesting bug was functionally present in the data the whole time — the model simply couldn't reliably extract it.
+
+6. **Confirmation-before-delete for an AI tool is a prompt-engineering problem, not a code problem — worth being honest about that.** Treating it like a genuine safety-critical constraint (explicit protocol, explicit "never call in the same turn," tested as its own scenario) reflects that the guardrail's strength is only as good as how deliberately it was specified.
+
+7. **Scope grew twice during design, both times for good reason, and both times the fix was consolidation, not addition.** Recurring-only → hold-all-future-transactions, and two tables → one generalized table with a boolean — in both cases, the simpler unified model turned out to also be the more correct one.
