@@ -203,3 +203,147 @@ Storing only the next occurrence (rather than pre-generating rows for every futu
 
 The `scheduled_transactions` table has **no standalone HTTP routes**. Every operation is invoked internally by `transactionsService`, which decides — based on a transaction's date — whether an action belongs to the `transactions` table or the `scheduled_transactions` table:
 
+```typescript
+const resolveScheduledDates = (inputDate: Date, isRecurring: boolean) => {
+  const today = dayjs.utc().startOf('day');
+  const occurrence = dayjs.utc(inputDate).startOf('day');
+  const shouldLogNow = occurrence.isSameOrBefore(today);
+
+  if (!isRecurring) return { shouldLogNow, nextDueDate: occurrence.toDate() };
+
+  let nextDueDate = occurrence.add(1, 'month');
+  while (nextDueDate.isSameOrBefore(today)) {
+    nextDueDate = nextDueDate.add(1, 'month');
+  }
+  return { shouldLogNow, nextDueDate: nextDueDate.toDate() };
+};
+```
+
+- **Create, future date** → row goes into `scheduled_transactions` only.
+- **Create, today/past date** → row goes into `transactions`; if recurring, a second `scheduled_transactions` row is created for the *next* occurrence, stamped `last_materialized_at = today` so it isn't double-reserved.
+- **Update, date moved into the future** → the real `transactions` row is deleted, a `scheduled_transactions` row created in its place (logged → pending conversion).
+- **Update, date moved into today/past** → the reverse: the `scheduled_transactions` row is deleted, `createTransaction` is called fresh (pending → logged conversion).
+- **Delete on a pending item** → removes the `scheduled_transactions` row directly; per product decision, this always affects the whole series for a recurring rule (no per-occurrence exceptions), since every projected future date resolves back to the same single row.
+
+The roll-forward `while` loop in `resolveScheduledDates` handles backdated recurring entries — logging June's rent while it's August correctly skips July's now-elapsed occurrence rather than treating it as instantly overdue, landing the rule's real next date on the first genuinely future month.
+
+### Reading: read-time projection
+
+Because only one row exists per rule, "does this recurring rule have an occurrence in October" isn't a stored fact — it's computed by walking forward from `next_due_date` in monthly steps until the query's date range is covered:
+
+```typescript
+let occurrence = dayjs.utc(s.next_due_date);
+while (occurrence.isSameOrBefore(end)) {
+  if (occurrence.isSameOrAfter(start)) {
+    results.push({ ...s, occurrence_date: occurrence.toDate() });
+  }
+  occurrence = occurrence.add(1, 'month');
+}
+```
+
+This single function powers three different consumers with the same underlying logic: calendar dots (range = the currently visible month), the merged transactions list (range = whatever day/period is being viewed), and safe-to-spend reservation (range = the current payday cycle).
+
+### Cron
+
+A daily job is the only thing that converts a pending row into a real transaction without user interaction:
+
+```typescript
+const dueScheduled = await scheduledTransactionsService.getDueScheduledTransactions(); // next_due_date <= today
+
+for (const scheduled of dueScheduled) {
+  await transactionsService.createTransaction(scheduled.user_id, scheduled.wallet_id, {
+    /* ...fields..., */
+    is_recurring: false, // prevents createTransaction from spawning a duplicate reschedule
+  });
+
+  if (scheduled.is_recurring) {
+    const { nextDueDate } = scheduledTransactionsService.resolveScheduledDates(scheduled.next_due_date, true);
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      next_due_date: nextDueDate,
+      last_materialized_at: scheduled.next_due_date,
+    });
+  } else {
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      is_active: false,
+    });
+  }
+
+  await sendPushNotification({ /* ...invalidateKeys for the frontend cache... */ });
+}
+```
+
+Two things worth calling out: `is_recurring: false` is passed deliberately when materializing — `createTransaction`'s own recurring branch would otherwise try to create its own next-occurrence row, duplicating the reschedule this loop already performs explicitly right after. And because materialization routes through the exact same `createTransaction` used by manual entry, the full Part 2 side-effect ripple (wellness score, challenges, thresholds, goals) fires identically whether a transaction was typed by a user or generated silently overnight.
+
+For testability, the job's actual logic is exported separately from its `cron.schedule()` wrapper, so a due date can be backdated via a direct SQL update and the materialization function invoked on demand — no need to wait for or fake the real clock.
+
+---
+
+## Part 4 — Designing the AI Tools
+
+Three tools — `create_transaction`, `update_transaction`, `delete_transaction` — sit in front of the exact same `transactionsService` functions used by the manual UI. This was a deliberate constraint: the tools contain no scheduling logic of their own. They gather structured inputs from a conversation and hand off to the same code path, so a transaction created by chat behaves identically — future-holding, recurring rescheduling, side-effect ripple, everything — to one created by hand.
+
+### `create_transaction` — handling both normal and recurring in one tool
+
+Rather than a separate tool for recurring creation, `is_recurring` is just one more optional field on the same schema used for a normal expense/income log:
+
+```typescript
+schema: z.object({
+  userId: z.string(),
+  walletId: z.string(),
+  amount: z.number(),
+  type: z.enum(['INCOME', 'EXPENSE']),
+  category: z.string(),
+  note: z.string().optional(),
+  date: z.string().optional(),
+  is_recurring: z.boolean().optional(),
+}),
+```
+
+The recurring-specific conversational behavior lives entirely in the tool's description, since there's no separate state machine — the model reads plain-language rules and is expected to follow a multi-turn pattern:
+
+```
+If the transaction's category is one of: Salary, Rent, Utilities, Transportation, Insurance, or Subscriptions —
+ask the user whether they want this to repeat monthly BEFORE calling this tool.
+If yes, also ask what date it should start — never assume today. Only call the tool once a specific
+date has been confirmed.
+```
+
+The function body itself branches on the resulting `status` the shared service returns, and — critically for the tools described next — flattens the created id to the top level of its response:
+
+```typescript
+return {
+  success: true,
+  transactionId: result.status === 'PENDING' ? result.scheduled_transaction.id : result.transaction.id,
+  status: result.status,
+  message: result.status === 'PENDING'
+    ? `Scheduled — will be logged automatically on its date, and reflected in safe-to-spend now.`
+    : `Transaction logged in ${wallet.currency_code}.`,
+  data: result,
+};
+```
+
+This flattening was a direct fix to an observed failure: an earlier version buried the id under a key name that changed depending on status (`data.transaction.id` vs `data.scheduled_transaction.id`), and the model reliably failed to hold onto it across a conversation turn as a result. A single, consistently-named `transactionId`/`status` pair fixed what looked like a "memory" problem but was actually a data-shape problem.
+
+### `update_transaction` and `delete_transaction` — same scope constraint, applied to both transaction types
+
+Both tools carry a `status: 'LOGGED' | 'PENDING'` field alongside `transactionId`, because a normal transaction and a scheduled one live in different tables and route to different underlying service calls:
+
+```typescript
+const result =
+  status === 'PENDING'
+    ? await transactionsService.updatePendingTransaction(userId, walletId, transactionId, updateData)
+    : await transactionsService.updateTransaction(userId, walletId, transactionId, updateData);
+```
+
+Both tools are constrained to only ever act on a transaction the agent itself created earlier **in the same conversation**, using the exact id/status pair its own prior `create_transaction` call returned — never a searched-for or guessed id. This was a scope decision, not a technical limitation: a natural-language lookup tool (resolving "delete the rent one from last week" into an id) was considered and explicitly deferred, in favor of a narrower, honestly-communicated capability — the agent corrects mistakes it just made, and says plainly that it can't touch anything older, rather than pretending to search for something it has no way to find.
+
+`delete_transaction` carries one additional constraint the other two don't: a required confirmation protocol, enforced entirely at the prompt level, since the tool function itself has no way to verify a user actually said yes before executing:
+
+```
+1. Restate which transaction you're about to delete (amount, category, date).
+2. Ask the user to explicitly confirm — e.g. "Should I delete this €50 Transportation entry from today? (yes/no)"
+3. Only call this tool if the user's next message is an unambiguous "yes".
+4. Never call this tool in the same turn you proposed the deletion.
+```
+
+For a recurring item specifically, that same confirmation message states plainly that deleting affects every future occurrence, not just the one being discussed in the conversation — mirroring the equivalent warning shown in the manual UI's delete confirmation modal, so the two entry points communicate the same consequence in the same terms.
