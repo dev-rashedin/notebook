@@ -1,0 +1,235 @@
+# How I Designed Normal and Recurring Transactions — Manually and via AI Tool Calling
+
+## Table of Contents
+1. [Background & Problem Statement](#background--problem-statement)
+2. [The Scope Evolution: From "Recurring" to "Hold All Future Transactions"](#the-scope-evolution-from-recurring-to-hold-all-future-transactions)
+3. [System Design Decisions](#system-design-decisions)
+4. [Database Schema](#database-schema)
+5. [The Core Mechanism: `resolveScheduledDates`](#the-core-mechanism-resolvescheduleddates)
+6. [Manual Entry Flow](#manual-entry-flow)
+7. [Editing and Deleting Pending Items](#editing-and-deleting-pending-items)
+8. [Safe-to-Spend Reservation](#safe-to-spend-reservation)
+9. [Calendar Projection: Displaying Recurring Items Without Storing Them](#calendar-projection-displaying-recurring-items-without-storing-them)
+10. [The Materialization Cron Job](#the-materialization-cron-job)
+11. [Push Notifications and the Invalidation Problem](#push-notifications-and-the-invalidation-problem)
+12. [AI Chat Tool Integration](#ai-chat-tool-integration)
+13. [The Confirmation Problem: Update and Delete via Chat](#the-confirmation-problem-update-and-delete-via-chat)
+14. [Testing and Edge Cases](#testing-and-edge-cases)
+15. [Known Trade-offs & Lessons Learned](#known-trade-offs--lessons-learned)
+
+---
+
+## Background & Problem Statement
+
+Aivinn's core loop is a "safe to spend" number — a single figure telling a user how much money they can spend right now without jeopardizing their budget for the period. The feature request that kicked this off was simple on paper: let users mark a transaction as recurring (rent, salary, subscriptions) so it repeats automatically every month, and reflect upcoming bills in safe-to-spend before they're actually paid.
+
+What started as "add a recurring checkbox" grew, through several rounds of clarification with our non-technical CEO, into a considerably broader system: **any future-dated transaction — recurring or one-time — is held in a pending state, deducted from safe-to-spend immediately, and only becomes a real, visible transaction on its actual due date.** This document walks through the full system as built: the schema, the decision logic, the manual UI flow, the AI chat tool flow, the calendar projection trick, the cron job, and the edge cases that came up along the way.
+
+---
+
+## The Scope Evolution: From "Recurring" to "Hold All Future Transactions"
+
+The original spec, from a Jira ticket, was narrow: *"Make an additional button that makes sure that transactions like income and expenses can be optional automatically recurring the same day every month."* The CEO's clarifying voice note sharpened the actual requirement:
+
+> "If there's a bill tomorrow, from now on it will just be deducted from safe to spend and not show in a transaction up until the date it is deducted... this resets on every budget period, same with everything else."
+
+The first implementation attempt treated this as recurring-only: a future recurring transaction would be held; a future one-time transaction would log immediately. That created a real gap — and a real vulnerability. A user could mark a large expense "recurring," dated weeks out, watch safe-to-spend drop immediately, and then simply delete or uncheck it before it was ever due — manipulating the number with zero trace, since nothing had actually been logged.
+
+The fix was to stop special-casing recurring vs. one-time and unify the rule: **any transaction dated in the future is held, no matter its source or whether it repeats.** This closed the loophole (a fabricated future transaction still has to be *deleted* — a visible, undoable action, not something that just evaporates) and simplified the mental model to one rule instead of two.
+
+---
+
+## System Design Decisions
+
+### Decision 1: One generalized table, not two
+
+Rather than a `recurring_transactions` table and a separate mechanism for one-time future transactions, everything lives in a single `scheduled_transactions` table with an `is_recurring` boolean. A one-time future transaction is simply a scheduled transaction that never reschedules after materializing.
+
+**Why:** the two concepts share almost everything — a category, an amount, a due date, a materialization event, a way to appear grayed-out in the UI. The only real difference is what happens *after* materialization: reschedule, or deactivate. Splitting them into two tables would have meant duplicating the projection logic, the safe-to-spend query, and the transactions-list merge query for no real benefit.
+
+### Decision 2: Read-time projection instead of pre-generated rows
+
+A recurring rule stores exactly **one** row — its next due date. It does not pre-generate a row for every future month. Calendar dots, list previews, and safe-to-spend all compute future occurrences on the fly, by walking forward from the stored date up to whatever range is being queried.
+
+**Why:** pre-generating rows for a rule that repeats indefinitely means either capping it arbitrarily (12 months? 24?) or generating rows forever, neither of which is clean. Read-time projection means a rule can repeat forever without ever needing a batch job to "extend" it, and it mirrors how Google Calendar itself handles recurring events — compute what's visible, not what might ever exist.
+
+### Decision 3: The one real row is the only thing that's ever editable by date
+
+Because projected future dots (month 2, 3, 4... out) are computed, not stored, editing "the September 15th one" and "the November 15th one" both resolve to the *same* underlying database row. Early in the design, this caused a real bug risk: if a user tapped a far-future projected dot and the edit form pre-filled that projected date as if it were directly editable, saving without any real intent to reschedule could silently overwrite the true next occurrence — causing whole months to vanish from the schedule.
+
+The resolution: whenever a pending item's detail view opens, it always fetches the *real* record fresh from the database (by the rule's actual id, which is shared across every projected occurrence), never trusting whatever date was used to compute the dot that was tapped. Editing the date on that real record then correctly reschedules the whole series going forward — which is the intended behavior, not a bug to guard against.
+
+### Decision 4: Asymmetric treatment of income vs. expense in safe-to-spend
+
+Only pending **expenses** reduce safe-to-spend ahead of time. Pending income is never pre-reserved — it only counts once actually received and logged.
+
+**Why:** per the CEO, "I would only do income when it is actually received, so it does not let you spend money you don't have yet." This is a deliberately conservative default — it means safe-to-spend can only ever be pessimistic about the future (an upcoming bill lowers it) and never optimistic (upcoming salary doesn't raise it prematurely).
+
+### Decision 5: "Saved" stays untouched by reservations
+
+The budget calculation returns two related but distinct numbers: `reserved` (used only for the safe-to-spend circular progress) and `remaining` (used for the "Saved" line item, `amount - spent`, with no reservation subtracted). These look similar but answer different questions — "what can I safely spend right now" vs. "how much of my budget have I actually kept." Conflating them would have made "Saved" drop the moment a bill was scheduled, even though nothing had actually been spent yet — which the CEO explicitly rejected: *"it will only affect when the amount is really spent and deducted."*
+
+---
+
+## Database Schema
+
+The system centers on one table, generalized from an earlier recurring-only design via a rename and a new column:
+
+```sql
+CREATE TABLE scheduled_transactions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    wallet_id           UUID NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type                transaction_type NOT NULL,
+    category_id         UUID NOT NULL REFERENCES categories(id) ON DELETE NO ACTION,
+    icon_name           TEXT NOT NULL,
+    amount              DECIMAL(12,2) NOT NULL,
+    note                TEXT,
+    is_recurring        BOOLEAN NOT NULL DEFAULT true,
+    recurrence_day      INTEGER,                    -- nullable: only meaningful if is_recurring
+    next_due_date       TIMESTAMPTZ NOT NULL,
+    last_materialized_at TIMESTAMPTZ,
+    is_active           BOOLEAN NOT NULL DEFAULT true,
+    source              TEXT NOT NULL DEFAULT 'MANUAL',  -- MANUAL | AI_CHAT
+    created_at          TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMP NOT NULL DEFAULT now()
+);
+
+ALTER TABLE transactions
+    ADD COLUMN scheduled_transaction_id UUID REFERENCES scheduled_transactions(id) ON DELETE SET NULL;
+```
+
+`user_id` here follows the same wallet-scoping convention used across the rest of the app: it's audit metadata (who set this up), never used to filter or scope actual calculations, since a wallet can have multiple members. `scheduled_transaction_id` on `transactions` is nullable and `ON DELETE SET NULL` — deleting a recurring rule should never delete the historical transactions it already generated, only orphan the link.
+
+`next_due_date` is the single source of truth for a rule's *real* upcoming occurrence. Everything past that — Sep, Oct, Nov if the real date is August — is computed, not stored.
+
+---
+
+## The Core Mechanism: `resolveScheduledDates`
+
+Every entry point (manual modal, AI tool, cron) funnels through one function that decides two things: should this occurrence log immediately, or wait? And if recurring, what's the correct next due date?
+
+```typescript
+const resolveScheduledDates = (inputDate: Date, isRecurring: boolean) => {
+  const today = dayjs.utc().startOf('day');
+  const occurrence = dayjs.utc(inputDate).startOf('day');
+
+  const shouldLogNow = occurrence.isSameOrBefore(today);
+
+  if (!isRecurring) {
+    return { shouldLogNow, nextDueDate: occurrence.toDate() };
+  }
+
+  let nextDueDate = occurrence.add(1, 'month');
+  while (nextDueDate.isSameOrBefore(today)) {
+    nextDueDate = nextDueDate.add(1, 'month');
+  }
+
+  return { shouldLogNow, nextDueDate: nextDueDate.toDate() };
+};
+```
+
+The roll-forward `while` loop matters for a specific scenario: a user backdating a transaction significantly (say, logging June's rent while it's August) shouldn't cause the system to think July's rent is "due immediately" the moment the rule is created. Instead, the loop walks forward past every already-elapsed month until it lands on the first genuinely future date — meaning skipped months (July, in this example) simply never get a transaction or a reservation. They're not backfilled, not flagged, just silently absent from history — an explicit, discussed trade-off rather than an oversight.
+
+One subtlety worth naming: dayjs's `.add(1, 'month')` correctly clamps rather than overflows for month-end dates — adding a month to January 31st lands on February 28th, not March 3rd. This was verified directly (`dayjs('2026-01-31').add(1, 'month')` → `2026-02-28`) before shipping, since an overflow bug here would have silently drifted every recurring rule anchored to the 29th–31st forward by a few days, month after month.
+
+---
+
+## Manual Entry Flow
+
+### Creating
+
+`transactionsService.createTransaction` is the single entry point for all transaction creation, manual or AI-driven. It branches on `resolveScheduledDates`:
+
+- **Future date** (regardless of `is_recurring`) → creates a `scheduled_transactions` row only. Nothing is written to `transactions`. Response: `{ status: 'PENDING', scheduled_transaction: {...} }`.
+- **Today or past** → logs to `transactions` immediately, exactly like a normal transaction always has. If `is_recurring` is true, it *also* creates the next `scheduled_transactions` row (for next month), stamped with `last_materialized_at` set to today, so the current period's reservation query doesn't double-count it. Response: `{ status: 'LOGGED', transaction: {...} }`.
+
+The frontend modal exposes this as a simple checkbox — "Make this a recurring transaction" — placed near the existing date picker, since the date the user already selects doubles as the recurrence anchor. No separate date-picker UI was needed.
+
+### Editing — including the logged-to-pending and pending-to-logged conversions
+
+Two directions needed explicit handling, both driven by the same "did the date cross today" question:
+
+**Logged transaction, date edited into the future:** the real `transactions` row is deleted, and a new `scheduled_transactions` row is created in its place — converting a real transaction back into a pending one. This matters because otherwise a user could edit a normal transaction's date forward and have it stay visible/counted despite no longer having happened yet, silently breaking the core "future = held" invariant.
+
+**Pending transaction, date edited into today or the past:** the reverse — the `scheduled_transactions` row is deleted, and `createTransaction` is called fresh to log a real transaction. This reuses the exact same creation logic as a brand-new manual entry, avoiding a second parallel implementation of "what does it mean to log a transaction."
+
+```typescript
+if (!shouldLogNow) {
+  // Convert LOGGED → PENDING
+  await prisma.transactions.delete({ where: { id: transactionId, wallet_id: walletId } });
+  const scheduledTransaction = await scheduledTransactionsService.createScheduledTransaction(/* ... */);
+  return { status: 'PENDING', scheduled_transaction: scheduledTransaction };
+}
+```
+
+```typescript
+// Convert PENDING → LOGGED (updatePendingTransaction)
+if (shouldLogNow) {
+  await scheduledTransactionsService.deleteScheduledTransaction(walletId, scheduledTransactionId);
+  return transactionsService.createTransaction(userId, walletId, { /* ... */ });
+}
+```
+
+---
+
+## Editing and Deleting Pending Items
+
+Per-occurrence editing (à la Google Calendar's "just this event" vs. "this and following") was considered and deliberately not built. It would require an exceptions table — storing per-date overrides against a rule — for a use case (editing a single future month's amount without touching the series) that wasn't a confirmed need. Instead, the simpler model shipped: **editing or deleting any occurrence, however far projected, always operates on the one real underlying rule, and the change applies to every future occurrence.**
+
+The UI makes this explicit rather than hiding it: whenever a pending, recurring item is opened for editing, a note reads *"This is a recurring transaction. Editing or deleting it will affect every future occurrence, not just this one."* The delete confirmation modal carries the same warning, with an important correction from an earlier draft — deleting a recurring rule does **not** affect past occurrences, since those already became independent, real `transactions` rows the moment they materialized. Only future generation stops.
+
+---
+
+## Safe-to-Spend Reservation
+
+The budget calculation (`getActiveBudget`) queries pending scheduled transactions falling within the current payday-to-payday cycle (`computeCycle(payday, month, year)` — not a calendar month) and sums the expense side into a `reserved` figure, kept separate from `spent`:
+
+```typescript
+const reserved = pendingScheduled
+  .filter(s => s.type === 'EXPENSE')
+  .reduce((sum, s) => sum + Number(s.amount), 0);
+
+const remaining = Math.max(amount - spent, 0); // untouched by reservations — "Saved"
+```
+
+The frontend's safe-to-spend circular progress then computes `budgetAmount - spent - reserved`, while the separately-displayed "Saved" figure stays as `amount - spent` alone — the two numbers diverge intentionally, one being a spending ceiling, the other a record of what's actually been kept.
+
+The query for "which pending items fall in this period" needed to become projection-aware, not just a lookup against the one stored `next_due_date` — a recurring rule anchored to the 5th of the month needs to surface as *reserved* for every future period it touches, not just the literal date stored in the row, which only ever reflects the *next* occurrence.
+
+---
+
+## Calendar Projection: Displaying Recurring Items Without Storing Them
+
+The calendar screen shows a dot on every date with activity — logged or pending — including recurring items projected arbitrarily far forward, the same way Google Calendar renders a weekly meeting on every future week without a database row per occurrence.
+
+```typescript
+for (const s of activeScheduled) {
+  if (!s.is_recurring) {
+    if (occ.isSameOrAfter(start) && occ.isSameOrBefore(end)) {
+      results.push({ ...s, occurrence_date: s.next_due_date });
+    }
+    continue;
+  }
+
+  let occurrence = dayjs.utc(s.next_due_date);
+  while (occurrence.isSameOrBefore(end)) {
+    if (occurrence.isSameOrAfter(start)) {
+      results.push({ ...s, occurrence_date: occurrence.toDate() });
+    }
+    occurrence = occurrence.add(1, 'month');
+  }
+}
+```
+
+The range (`start`/`end`) is driven by the calendar UI itself — as the user swipes to a new month (`react-native-calendars`' `onMonthChange` callback), the frontend re-requests with a new range end, and React Query naturally refetches. Nothing is computed further out than what's actually visible on screen, mirroring the same lazy-computation principle used for the underlying rule itself.
+
+---
+
+## The Materialization Cron Job
+
+A daily cron job is the only thing that turns a pending scheduled transaction into a real one without user interaction:
+
+```typescript
+const dueScheduled = await scheduledTransactionsService.getDueScheduledTransactions(); // next_due_date <= today
+
