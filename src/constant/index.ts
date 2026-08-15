@@ -41,8 +41,6 @@ export const docsOrder: Record<string, string[]> = {
   ],
   articles: [
     'index',
-    '_Addons',
-    'f-fileName',
   ],
   interviews: [
     'index',

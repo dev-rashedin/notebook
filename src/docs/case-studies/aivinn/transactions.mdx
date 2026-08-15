@@ -233,3 +233,110 @@ A daily cron job is the only thing that turns a pending scheduled transaction in
 ```typescript
 const dueScheduled = await scheduledTransactionsService.getDueScheduledTransactions(); // next_due_date <= today
 
+for (const scheduled of dueScheduled) {
+  await transactionsService.createTransaction(scheduled.user_id, scheduled.wallet_id, {
+    /* ...fields..., */
+    is_recurring: false, // deliberate — see below
+  });
+
+  if (scheduled.is_recurring) {
+    const { nextDueDate } = scheduledTransactionsService.resolveScheduledDates(scheduled.next_due_date, true);
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      next_due_date: nextDueDate,
+      last_materialized_at: scheduled.next_due_date,
+    });
+  } else {
+    await scheduledTransactionsService.updateScheduledTransaction(scheduled.wallet_id, scheduled.id, {
+      is_active: false,
+    });
+  }
+
+  await sendPushNotification({ /* ... */ });
+}
+```
+
+The `is_recurring: false` passed to `createTransaction` here is a deliberate override, not an oversight — `createTransaction`'s own recurring branch would otherwise try to spawn its *own* next scheduled row, duplicating the reschedule this cron job already performs explicitly right after. Two different code paths both trying to own "what happens next" would risk either a duplicate row or a race between them.
+
+For testing without waiting on real calendar time, the job logic was deliberately separated from its `cron.schedule()` wrapper into its own exported function — allowing a due date to be manually backdated via SQL and the materialization logic invoked directly, without faking the system clock or waiting for the actual schedule to fire.
+
+---
+
+## Push Notifications and the Invalidation Problem
+
+Materialization fires a push notification carrying an `invalidateKeys` array in its payload — a list of React Query cache keys (`transactions`, `allTimeTransactions`, `budget`) the frontend should refresh once the notification lands. This closes a gap that surfaced directly during testing: the backend correctly materializing a transaction is invisible to the user until *something* tells their already-open app to refetch — otherwise they'd see stale, still-pending data until a manual pull-to-refresh.
+
+The existing notification listener (`addNotificationReceivedListener`, firing while the app is foregrounded) already read this field and called `queryClient.invalidateQueries()` per key — correctly built, but its effectiveness is bounded by the platform: it can only ever fire while the app is actually running. A notification arriving while the app is fully closed will display in the OS tray regardless, but nothing refreshes silently in the background — the existing `AppState`-driven refetch on becoming active is what catches up the moment the user reopens the app, by any means, not just by tapping the notification itself.
+
+---
+
+## AI Chat Tool Integration
+
+The AI chat layer needed three tools, all funneling through the exact same `transactionsService` functions the manual modal uses — deliberately, so future-dated and recurring logic never needs a second implementation.
+
+### `create_transaction`
+
+Structurally identical to before, with `is_recurring` and `source: 'AI_CHAT'` added. The tool's description carries the conversational logic the model needs, since there's no code-level state machine driving a multi-turn agent flow:
+
+- For a fixed list of categories (Salary, Rent, Utilities, Transportation, Insurance, Subscriptions), the model is instructed to ask *before* calling the tool whether the transaction should repeat monthly, and if so, to ask for a start date rather than defaulting silently to today.
+- The tool's response flattens `transactionId` and `status` to the top level — an important correction from an earlier version that buried the id two levels deep under a key name that varied by status (`data.transaction.id` vs `data.scheduled_transaction.id`). A model reasoning across conversation turns needs an unambiguous, consistently-located value to hold onto; nesting it inconsistently was directly responsible for the model "forgetting" the id it needed for a correction one turn later.
+
+### `update_transaction` and `delete_transaction`
+
+Both operate under a single hard constraint, chosen deliberately over building a search/lookup capability: **the agent may only act on a transaction it created itself, earlier in the same conversation**, using the exact `transactionId`/`status` pair its own prior tool call returned. It cannot look up, guess, or infer an id for anything created outside that window — including transactions logged through the manual app UI.
+
+This wasn't the only option. A `find_transaction_tool` supporting natural-language lookup ("delete the rent one from last week") was considered, but rejected for this iteration as meaningfully larger in scope — it would need fuzzy matching and disambiguation logic that a same-turn-only constraint sidesteps entirely, in exchange for a real but bounded limitation: the agent genuinely cannot help correct a transaction from a prior session, and is instructed to say so plainly and point the user to the manual app UI instead of pretending to search for something it has no way to find.
+
+---
+
+## The Confirmation Problem: Update and Delete via Chat
+
+Update was allowed to execute directly once the agent had a valid id and a clear correction from the user (e.g. "no I meant tomorrow" right after creation) — low enough stakes to not need an extra confirmation round-trip. Delete was treated differently, and deliberately more conservatively:
+
+> "The system must get a confirmation before deleting anything, a clear yes/yup. Otherwise it can create danger."
+
+The tool's description encodes this as an explicit, ordered protocol rather than a soft suggestion — restate what's about to be deleted, ask a direct yes/no question, and only call the tool on an unambiguous affirmative in the user's *next* message, never in the same turn as the initial request:
+
+```
+REQUIRED CONFIRMATION STEP — do this before calling this tool, every time, no exceptions:
+1. Restate which transaction you're about to delete (amount, category, date).
+2. Ask the user to explicitly confirm — e.g. "Should I delete this €50 Transportation entry from today? (yes/no)"
+3. Only call this tool if the user's next message is an unambiguous "yes".
+4. If unclear or hesitant — do NOT call this tool.
+5. Never call this tool in the same turn you proposed the deletion.
+```
+
+This is worth naming honestly: it's a prompt-level guardrail, not a code-level one. The tool function itself has no way to verify a confirmation actually happened — it executes whenever called. The safety here rests entirely on the model reliably following instructed behavior, which is why it was tested explicitly as its own scenario rather than assumed to work from the description alone.
+
+For recurring items specifically, the confirmation message also states plainly that deleting cancels every future occurrence, not just the one being discussed — surfacing the same "affects the whole series" caveat that the manual UI shows, so a user correcting a single detail via chat isn't accidentally steered toward deleting the whole rule when `update_transaction` was what they actually wanted.
+
+---
+
+## Testing and Edge Cases
+
+Testing without waiting on real calendar dates relied on directly manipulating `next_due_date` via SQL and triggering the extracted cron function on demand:
+
+```sql
+UPDATE scheduled_transactions
+SET next_due_date = next_due_date - INTERVAL '1 day'
+WHERE id = '<test-row-id>';
+```
+
+Confirmed working through this method: recurring materialization correctly rescheduling forward rather than staying anchored to the same date; one-time materialization correctly deactivating rather than attempting a nonexistent reschedule; safe-to-spend reservation correctly excluding an item once it materializes within the same period (avoiding a double count between "reserved" and "spent"); and the month-end clamp behavior of the underlying date library, checked directly rather than assumed.
+
+Deliberately deferred past the initial release, as lower-risk than a visible date-drift bug: exact boundary behavior when a due date falls precisely on a budget period's start or end date, and whether a recurring rule created by one member of a shared wallet correctly reserves and materializes visibly for every other member. Both are backend correctness questions rather than user-facing breakage risks, and were treated as reasonable to monitor post-launch under a real deadline rather than block release on.
+
+---
+
+## Known Trade-offs & Lessons Learned
+
+1. **The loophole that reshaped the whole design was found by asking "why," not by testing.** The jump from "hold recurring future transactions" to "hold *all* future transactions" came from questioning what a user could exploit, not from a bug report — a reminder that a feature's second-order behavior (what happens when someone acts in bad faith, or just clicks around curiously) deserves as much design attention as its happy path.
+
+2. **Read-time projection is the right call whenever "infinite forward repetition" meets "needs to be queryable."** Storing an occurrence row per future month doesn't scale conceptually (there's no natural stopping point), and computing on demand — bounded by whatever range the caller actually needs — sidesteps the question entirely. This pattern shows up three times in the system independently (calendar dots, transaction list merging, safe-to-spend reservation) and was solved the same way each time once recognized.
+
+3. **A single row shared across every projected occurrence is powerful but has a sharp edge.** It's what makes "editing affects the whole series" simple to implement correctly — but it also means a UI that naively pre-fills a *projected* date as directly editable can silently corrupt the one real record behind it. The fix (always re-fetch the real record fresh, regardless of which projection was tapped) is cheap, but easy to miss if the distinction between "displayed date" and "real stored date" isn't kept explicit throughout the stack.
+
+4. **Giving an AI tool the ability to correct its own prior actions requires the tool's own output to be legible to the model, not just correct.** The id-nesting bug (`data.transaction.id` vs `data.scheduled_transaction.id`, buried two levels deep) was functionally present in the data the whole time — the model simply couldn't reliably extract it. A flat, consistently-named `transactionId`/`status` pair at the top level of every response fixed a "the AI forgot" symptom that had nothing to do with memory and everything to do with output shape.
+
+5. **Confirmation-before-delete for an AI tool is a prompt-engineering problem, not a code problem — and that's worth being honest about.** There's no code path that can verify a user actually said yes before a destructive tool call; the model has to be instructed carefully enough that it reliably pauses. Treating this like a genuine safety-critical constraint (explicit protocol, explicit "never call in the same turn," tested as its own scenario) reflects that the guardrail's strength is only as good as how deliberately it was specified.
+
+6. **Scope grew twice during design, both times for good reason, and both times the fix was consolidation, not addition.** Recurring-only → hold-all-future-transactions, and two tables → one generalized table with a boolean — in both cases, the simpler unified model turned out to also be the more correct one, not just the more convenient one to build.
