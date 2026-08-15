@@ -2,8 +2,7 @@ import Link from 'next/link';
 import DisplayHeadings from './DisplayHeadings';
 import Divider from './ui/CustomDivider';
 import RightSidebarPortal from './RightSidebarPortal';
-import { getContent } from '@/lib';
-import { FiEdit } from 'react-icons/fi';
+import getContent from '@/lib/getContent';
 
 interface Props {
   endpoint: string;

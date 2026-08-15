@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import LeftSidebar from '@/components/LeftSidebar';
-import { getContentLinks } from '@/lib';
+import  {getContentLinks}  from '@/lib/getLinks';
 import MotionWrapper from '@/components/MotionWrapper';
 import DrawerContainer from '@/components/DrawerContainer';
 import { getNestedLinks } from '@/lib/getLinks';
